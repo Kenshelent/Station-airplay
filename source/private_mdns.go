@@ -61,15 +61,20 @@ func startPrivateMDNS(ctx context.Context, root, state string, p stationProfile,
 	if err != nil {
 		return err
 	}
-	if err = launch("avahi-namespace", filepath.Join(root, "bin/avahi-namespace"), state,
-		filepath.Join(root, "bin/avahi-daemon"),
-		"-f", avahiConf, "--no-drop-root", "--no-chroot", "--no-rlimits", "--no-proc-title"); err != nil {
+	avahi := []string{filepath.Join(root, "bin/avahi-daemon")}
+	if loader := legacyRuntimeLoader(root); loader != "" {
+		avahi = append([]string{loader, "--library-path", filepath.Join(root, "lib")}, avahi...)
+	}
+	avahiArgs := append([]string{state}, avahi...)
+	avahiArgs = append(avahiArgs, "-f", avahiConf, "--no-drop-root", "--no-chroot", "--no-rlimits", "--no-proc-title")
+	if err = launch("avahi-namespace", filepath.Join(root, "bin/avahi-namespace"), avahiArgs...); err != nil {
 		return err
 	}
 	return ready("private Avahi D-Bus registration", func(parent context.Context) error {
 		checkCtx, cancel := context.WithTimeout(parent, 3*time.Second)
 		defer cancel()
 		sendBin, sendArgs := dbusCommand(root, p, "dbus-send")
+		sendBin, sendArgs = withLegacyRuntime(root, sendBin, sendArgs)
 		c := exec.CommandContext(checkCtx, sendBin, append(sendArgs, "--system", "--print-reply", "--dest=org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus.NameHasOwner", "string:org.freedesktop.Avahi")...)
 		c.Env = envFor(sendBin)
 		b, err := c.CombinedOutput()

@@ -416,6 +416,30 @@ func dbusCommand(root string, p stationProfile, tool string) (string, []string) 
 	return filepath.Join(root, "bin", tool), nil
 }
 
+// legacyRuntimeLoader reports the bundled armhf loader when a package carries
+// its own libc. Only the original Mini firmware is old enough to need it: its
+// glibc is 2.23 while the rebuilt runtime needs 2.25..2.29. Packages for newer
+// firmware do not contain the loader and keep using the firmware libc.
+func legacyRuntimeLoader(root string) string {
+	path := filepath.Join(root, "lib", "ld-linux-armhf.so.3")
+	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+		return path
+	}
+	return ""
+}
+
+// withLegacyRuntime runs a packaged binary through the bundled loader so the
+// package libc, not the firmware one, resolves its symbols. Firmware tools and
+// packages without the loader are returned unchanged.
+func withLegacyRuntime(root, bin string, args []string) (string, []string) {
+	loader := legacyRuntimeLoader(root)
+	prefix := filepath.Join(root, "bin") + string(filepath.Separator)
+	if loader == "" || !strings.HasPrefix(bin, prefix) {
+		return bin, args
+	}
+	return loader, append([]string{"--library-path", filepath.Join(root, "lib"), bin}, args...)
+}
+
 func firmwareALSA(p stationProfile) string {
 	if p.alsaLib != "" {
 		return p.alsaLib
@@ -662,6 +686,7 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 		return env
 	}
 	launch := func(name, bin string, args ...string) error {
+		bin, args = withLegacyRuntime(root, bin, args)
 		return launchWith(name, bin, childEnv(bin), args...)
 	}
 	if err = startPrivateMDNS(ctx, root, state, p, childEnv, launch, exits); err != nil {
@@ -682,7 +707,8 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 				childEnv = runtimeEnv(env, libs, firmwareALSA(p))
 			}
 		}
-		return launchWith(name, filepath.Join(root, "bin", binary), childEnv, args...)
+		path, args := withLegacyRuntime(root, filepath.Join(root, "bin", binary), args)
+		return launchWith(name, path, childEnv, args...)
 	}
 	if err = launchAP2("nqptp", "-v"); err != nil {
 		return err
