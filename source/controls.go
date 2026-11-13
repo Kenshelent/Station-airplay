@@ -21,6 +21,9 @@ type controlsConfig struct {
 	// DefaultsVersion records which release's defaults this file has already
 	// been migrated through; missing means 2.1.4 or older.
 	DefaultsVersion int `json:"defaults_version,omitempty"`
+	// TimingMode is independent of shared-control capabilities. Empty means
+	// synchronized playback; fast_audio deliberately advances sound by 1.7 s.
+	TimingMode string `json:"timing_mode,omitempty"`
 	// Omitted keeps the LED spectrum on; false restores the solid indication
 	// frames without opening a PCM tap or reading cover art.
 	Spectrum           *bool        `json:"spectrum,omitempty"`
@@ -77,6 +80,9 @@ func loadControls(path string) (*controlsConfig, error) {
 	}
 	if c.SpectrumBrightness < 0 || c.SpectrumBrightness > 2 {
 		return nil, errors.New("spectrum_brightness must be between 0 and 2")
+	}
+	if err := c.validateTiming(); err != nil {
+		return nil, err
 	}
 	for _, gain := range []float64{c.SpectrumGainR, c.SpectrumGainG, c.SpectrumGainB} {
 		if gain < 0 || gain > 4 {

@@ -181,6 +181,9 @@ func feature(d yamDevice, name string) bool {
 // stationProfile is the per-model hardware layout. YAM reports the model and
 // features; everything else the renderer and audio setup need lives here.
 type stationProfile struct {
+	// Set per invocation, not in the static model table. Survives shared
+	// controls being disabled when the host lacks an optional capability.
+	timingMode                     string
 	pcm, receiverABI, airplayModel string
 	outputRate                     int
 	name                           string

@@ -111,6 +111,9 @@ func runWithControls(ctx context.Context, sharedAudio bool, controls *controlsCo
 	if !ok {
 		return fmt.Errorf("unsupported YAM model %q", d.Model)
 	}
+	p = profileWithTiming(p, controls)
+	fmt.Fprintf(os.Stderr, "station-airplay: timing mode=%s offset=%.1fs (receiver restart required to change)\n",
+		p.timingMode, p.latencyOffset())
 	// A model whose control profile is not qualified still has to play audio:
 	// Station 3 and Mini 3 Pro have no qualified shared-control transport, and
 	// refusing to start left them with a dead plugin.
@@ -233,11 +236,10 @@ func receiverConfig(p stationProfile) string {
  // Stay well inside AirPlay's own buffering: the stock 0.2 s backend buffer
  // adds avoidable start-up and resume delay in front of the shared mixer.
  audio_backend_buffer_desired_length_in_seconds = 0.10;
- // Play 1.7 s ahead of the negotiated latency: about 2 s from the sender
- // minus the 0.1 s back-end buffer leaves the buffer that survived the live
- // Mini. The offset trades multi-room sync with other AirPlay receivers;
- // lower it if the link underruns.
- audio_backend_latency_offset_in_seconds = -1.7;
+ // Synchronized mode preserves negotiated AirPlay presentation time.
+ // fast_audio explicitly trades video/multiroom synchronization for a
+ // shorter apparent delay; backend buffering is independent of this mode.
+ audio_backend_latency_offset_in_seconds = %.1f;
 };
 sessioncontrol = { allow_session_interruption = "yes"; session_timeout = 60; };
 alsa = {
@@ -248,7 +250,7 @@ alsa = {
  disable_standby_mode = "never";
 };
 %s
-`, p.name, p.airplayModel, device, profileOutputRate(p), meta)
+`, p.name, p.airplayModel, p.latencyOffset(), device, profileOutputRate(p), meta)
 }
 
 // uiAsound is the receiver's private ~/.asoundrc. The file plugin feeds the
@@ -293,6 +295,7 @@ func uiAsoundSpectrum(pcm, clockFIFO, spectrumFIFO string) string {
 }
 
 func receiverControlConfig(p stationProfile, controls *controlsConfig, artwork ...bool) string {
+	p = profileWithTiming(p, controls)
 	config := receiverConfig(p)
 	if controls == nil {
 		return config
