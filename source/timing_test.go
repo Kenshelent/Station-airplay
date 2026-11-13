@@ -25,15 +25,15 @@ func TestTimingConfigValidation(t *testing.T) {
 }
 
 func TestTimingModesAcrossProfiles(t *testing.T) {
-	for _, model := range []string{"yandexmini", "yandexmini_2", "yandexstation_2", "yandexmidi", "yandexplum", "plum", "yandexmicro"} {
-		p, ok := profileFor(model)
-		if !ok {
-			t.Fatal(model)
+	for _, p := range profiles {
+		model := strings.Join(p.models, ",")
+		if !strings.Contains(receiverConfig(p), "audio_backend_latency_offset_in_seconds = -1.7;") {
+			t.Fatalf("default profile %s does not retain -1.7", model)
 		}
 		for _, tc := range []struct {
 			mode   string
 			offset string
-		}{{"", "0.0"}, {timingSynchronized, "0.0"}, {timingFastAudio, "-1.7"}} {
+		}{{"", "-1.7"}, {timingSynchronized, "0.0"}, {timingFastAudio, "-1.7"}} {
 			cfg := &controlsConfig{TimingMode: tc.mode}
 			for _, conf := range []string{
 				receiverControlConfig(p, cfg),

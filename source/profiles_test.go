@@ -86,7 +86,7 @@ func TestSharedProfilesKeepProvenAudioContract(t *testing.T) {
 }
 
 // The short backend buffer is independent of presentation-time offset. Default
-// profiles must no longer advance audio relative to negotiated AirPlay time.
+// profiles retain the owner's fast-audio default on every model.
 func TestSharedReceiverKeepsShortBackendBuffer(t *testing.T) {
 	for _, model := range []string{"yandexmini", "yandexmini_2", "yandexstation_2", "yandexmidi", "yandexplum", "yandexmicro"} {
 		p, ok := profileFor(model)
@@ -96,7 +96,7 @@ func TestSharedReceiverKeepsShortBackendBuffer(t *testing.T) {
 		conf := receiverConfig(p)
 		for _, s := range []string{
 			"audio_backend_buffer_desired_length_in_seconds = 0.10;",
-			"audio_backend_latency_offset_in_seconds = 0.0;",
+			"audio_backend_latency_offset_in_seconds = -1.7;",
 		} {
 			if !strings.Contains(conf, s) {
 				t.Fatalf("%s lacks %q:\n%s", model, s, conf)

@@ -23,7 +23,7 @@ type controlsConfig struct {
 	// been migrated through; missing means 2.1.4 or older.
 	DefaultsVersion int `json:"defaults_version,omitempty"`
 	// TimingMode is independent of shared-control capabilities. Empty means
-	// synchronized playback; fast_audio deliberately advances sound by 1.7 s.
+	// fast_audio: deliberately advance sound by 1.7 s on every model.
 	TimingMode         string           `json:"timing_mode,omitempty"`
 	Equalizer          *equalizerConfig `json:"equalizer,omitempty"`
 	SpectrumBlackFloor *float64         `json:"spectrum_black_floor,omitempty"`
