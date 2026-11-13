@@ -131,6 +131,28 @@ func serveControlsObserved(ctx context.Context, bus string, api *yamAPI, d yamDe
 // serveControlsUI also attaches the optional spectrum tap. animateRing is true
 // when the controls tick owns the RGB ring; clock renderers feed the tap from
 // their own display loop instead.
+// configureSolidFloor sets how far a dim artwork is lifted on a solid frame.
+// It runs from configureSpectrum, which every tap goes through: models that
+// keep the PCM animation off still paint a solid cover.
+func configureSolidFloor(d yamDevice, tap *spectrumTap) {
+	if tap == nil {
+		return
+	}
+	floor := solidMinValue
+	if d.Model == "yandexmini" || d.Model == "YandexStationMini" {
+		// The six-zone logo runs at the LED driver's stock current and reads
+		// as underdriven at the tuned floor, so it uses the whole range.
+		floor = solidFullValue
+	}
+	tap.mu.Lock()
+	tap.solidFloor = floor
+	tap.mu.Unlock()
+	fmt.Fprintf(os.Stderr, "airplay spectrum: solid frame floor %.2f\n", floor)
+}
+
+// serveControlsUI also attaches the optional spectrum tap. animateRing is true
+// when the controls tick owns the RGB ring; clock renderers feed the tap from
+// their own display loop instead.
 func serveControlsUI(ctx context.Context, bus string, api *yamAPI, d yamDevice, cfg controlsConfig, observer func(rendererControlState), spectrum *spectrumTap, animateRing bool) error {
 	r, err := openReceiver(bus)
 	if err != nil {
@@ -487,6 +509,7 @@ func configureSpectrum(d yamDevice, cfg controlsConfig, tap *spectrumTap) error 
 		color := [3]float64{float64(rgb>>16&255) / 255, float64(rgb>>8&255) / 255, float64(rgb&255) / 255}
 		blackColor = &color
 	}
+	configureSolidFloor(d, tap)
 	tap.mu.Lock()
 	tap.brightness = cfg.SpectrumBrightness
 	tap.gain = gain
@@ -496,6 +519,7 @@ func configureSpectrum(d yamDevice, cfg controlsConfig, tap *spectrumTap) error 
 	tap.blackColor = blackColor
 	tap.ceiling = ceiling
 	tap.satBoost = saturation
+	solidFloor := tap.solidFloor
 	tap.mu.Unlock()
 	if profile != "" {
 		if d.Model != "yandexmini_2" {
@@ -513,8 +537,8 @@ func configureSpectrum(d yamDevice, cfg controlsConfig, tap *spectrumTap) error 
 			fmt.Fprintf(os.Stderr, "airplay spectrum: stock LED colour profile %s\n", profile)
 		}
 	}
-	fmt.Fprintf(os.Stderr, "airplay spectrum: brightness %.2f (0=default), white balance %.2f/%.2f/%.2f, neutral black %t, black floor %.2f\n",
-		cfg.SpectrumBrightness, gain[0], gain[1], gain[2], neutralBlack, floor)
+	fmt.Fprintf(os.Stderr, "airplay spectrum: brightness %.2f (0=default), white balance %.2f/%.2f/%.2f, neutral black %t, black floor %.2f, solid floor %.2f\n",
+		cfg.SpectrumBrightness, gain[0], gain[1], gain[2], neutralBlack, floor, solidFloor)
 	return nil
 }
 
