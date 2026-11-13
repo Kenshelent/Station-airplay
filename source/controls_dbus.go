@@ -150,7 +150,8 @@ func serveControlsUI(ctx context.Context, bus string, api *yamAPI, d yamDevice, 
 		if fb, e := openStation2LED(); e == nil {
 			station = framebufferStation{yamControlStation: yamControlStation{api: api, volume: volume}, fb: fb}
 			ledCount = station2LEDs
-			go watchStation2Preview(ctx, fb, station2PreviewPath)
+			// The next-version panel uses the same expiring preview broker on
+			// every model. Do not start the legacy file watcher as a second owner.
 			defer func() {
 				stop, done := context.WithTimeout(context.Background(), time.Second)
 				defer done()
@@ -162,7 +163,18 @@ func serveControlsUI(ctx context.Context, bus string, api *yamAPI, d yamDevice, 
 		}
 	}
 	c := &sharedController{cfg: cfg, receiver: r, station: station, ledCount: ledCount, rendererUpdate: observer, spectrum: spectrum}
-	if spectrum != nil && animateRing && cfg.useSpectrum() && ledCount > 0 {
+	c.preview = &ledPreview{}
+	previewCtx, stopPreview := context.WithCancel(ctx)
+	previewDone := make(chan struct{})
+	go func() { defer close(previewDone); runPreview(previewCtx, c) }()
+	defer func() { stopPreview(); <-previewDone }()
+	stopPanel, panelErr := startControlPanel(ctx, c, cfg.configPath, panelSocket)
+	if panelErr != nil {
+		fmt.Fprintf(os.Stderr, "station-airplay: control panel unavailable: %v\n", panelErr)
+	} else {
+		defer stopPanel()
+	}
+	if spectrum != nil && animateRing && cfg.LEDs && ledCount > 0 {
 		if err = configureSpectrum(d, cfg, spectrum); err != nil {
 			return err
 		}
@@ -456,12 +468,31 @@ func waitNativeVolume(ctx context.Context, v volumeControl) error {
 func configureSpectrum(d yamDevice, cfg controlsConfig, tap *spectrumTap) error {
 	gain, profile, neutralBlack, swap := spectrumDefaults(d, cfg)
 	floor, ceiling, saturation := spectrumComfort(d)
+	if cfg.SpectrumBlackFloor != nil {
+		floor = *cfg.SpectrumBlackFloor
+	}
+	if cfg.SpectrumBlackFloor != nil {
+		neutralBlack = true
+	}
+	if cfg.SpectrumSaturation > 0 {
+		saturation = cfg.SpectrumSaturation
+	}
+	var blackColor *[3]float64
+	if cfg.SpectrumBlackColor != "" {
+		var rgb uint32
+		if _, err := fmt.Sscanf(cfg.SpectrumBlackColor, "#%06x", &rgb); err != nil {
+			return err
+		}
+		color := [3]float64{float64(rgb>>16&255) / 255, float64(rgb>>8&255) / 255, float64(rgb&255) / 255}
+		blackColor = &color
+	}
 	tap.mu.Lock()
 	tap.brightness = cfg.SpectrumBrightness
 	tap.gain = gain
 	tap.neutralBlack = neutralBlack
 	tap.swapRB = swap
 	tap.blackFloor = floor
+	tap.blackColor = blackColor
 	tap.ceiling = ceiling
 	tap.satBoost = saturation
 	tap.mu.Unlock()

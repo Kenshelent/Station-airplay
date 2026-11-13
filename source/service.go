@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	version             = "Station airplay 2.1.6"
+	version             = "Station airplay 2.1.7-dev.1"
 	audioFIFO           = "/tmp/sps.fifo"
 	spectrumFIFO        = "/tmp/sps-spectrum.fifo"
 	metadataFIFO        = "/tmp/shairport-sync-ap2-metadata"
@@ -184,6 +184,7 @@ type stationProfile struct {
 	// Set per invocation, not in the static model table. Survives shared
 	// controls being disabled when the host lacks an optional capability.
 	timingMode                     string
+	eqConfigPath                   string
 	pcm, receiverABI, airplayModel string
 	outputRate                     int
 	name                           string
@@ -882,6 +883,9 @@ func main() {
 	sharedAudio := flag.Bool("shared-audio", false, "use audio-only shared PCM on supported Plum devices; keep Alice running")
 	controlsPath := flag.String("controls-config", "", "opt-in shared controls JSON (requires media-enabled YAM and receiver)")
 	showVersion := flag.Bool("version", false, "print version and exit")
+	worker := flag.Bool("eq-worker", false, "experimental AirPlay PCM equalizer worker")
+	workerPCM := flag.String("eq-pcm", "", "firmware output PCM for equalizer worker")
+	workerRate := flag.Int("eq-rate", 48000, "equalizer worker sample rate")
 	flag.Parse()
 	if flag.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "station-airplay: unexpected positional arguments")
@@ -893,6 +897,17 @@ func main() {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
+	if *worker {
+		if *workerPCM == "" {
+			fmt.Fprintln(os.Stderr, "eq-pcm required")
+			os.Exit(2)
+		}
+		if err := eqWorker(ctx, *controlsPath, *workerPCM, *workerRate); err != nil {
+			fmt.Fprintln(os.Stderr, "equalizer:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	// yamd 0.1.x does not set a parent-death signal on binary plugins. Retire
 	// this service if its owning daemon disappears, before a replacement starts.
 	go watchParent(ctx, cancel, os.Getppid(), os.Getppid)

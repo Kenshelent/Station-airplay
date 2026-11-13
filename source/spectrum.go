@@ -62,6 +62,7 @@ type spectrumTap struct {
 	// satBoost lifts muted artwork (yellow, cream, gradients) without touching
 	// white or grey, because saturated primaries are already at the limit.
 	blackFloor float64
+	blackColor *[3]float64
 	ceiling    float64
 	satBoost   float64
 	mu         sync.Mutex
@@ -85,74 +86,14 @@ type spectrumTap struct {
 	haveCoverColor bool
 	// palette holds the cover's most populated colour clusters for a
 	// multi-zone indication; the dominant colour above stays the fallback.
-	palette [][3]float64
-	// shownColor/shownPalette are what the ring currently displays. A newly
-	// adopted cover is cross-faded from them instead of swapping hues in one
-	// frame; coverGen tells easedArtwork when to start a new fade.
-	shownColor   [3]float64
-	shownPalette [][3]float64
-	shownValid   bool
-	coverGen     int
-	fadeGen      int
-	fadeStart    time.Time
-	fadeFrom     [3]float64
-	fadePalette  [][3]float64
+	palette                 [][3]float64
+	spectrumFade, solidFade frameTransition
+	coverGen                int
 }
 
 // artworkFade is the length of the cover cross-fade. 300 ms keeps the change
 // visible without lagging behind a track skip.
 const artworkFade = 300 * time.Millisecond
-
-// easedArtwork returns the colour and palette the ring should show now. A new
-// cover is cross-faded from the previous one with smoothstep, so both the 10 Hz
-// spectrum loop and the 20 Hz display tick see the same transition. Callers
-// hold t.mu. The palette is copied because solidFrame renders it after
-// unlocking while the next tick keeps the eased state.
-func (t *spectrumTap) easedArtwork(now time.Time) ([3]float64, [][3]float64) {
-	if !t.haveCoverColor {
-		return t.coverColor, append([][3]float64(nil), t.palette...)
-	}
-	if t.fadeGen != t.coverGen {
-		t.fadeGen = t.coverGen
-		t.fadeStart = now
-		t.fadeFrom = t.shownColor
-		t.fadePalette = append([][3]float64(nil), t.shownPalette...)
-		if !t.shownValid {
-			// Nothing on the ring yet: the first cover appears at once.
-			t.fadeStart = now.Add(-artworkFade)
-		}
-	}
-	progress := 1.0
-	if !t.fadeStart.IsZero() {
-		progress = float64(now.Sub(t.fadeStart)) / float64(artworkFade)
-	}
-	if progress >= 1 {
-		t.shownColor = t.coverColor
-		t.shownPalette = append([][3]float64(nil), t.palette...)
-		t.shownValid = true
-		return t.shownColor, append([][3]float64(nil), t.shownPalette...)
-	}
-	if progress < 0 {
-		progress = 0
-	}
-	ease := progress * progress * (3 - 2*progress)
-	shown := t.fadeFrom
-	for i := range shown {
-		shown[i] += (t.coverColor[i] - shown[i]) * ease
-	}
-	shownPalette := make([][3]float64, len(t.palette))
-	for i := range shownPalette {
-		from := t.fadeFrom
-		if i < len(t.fadePalette) {
-			from = t.fadePalette[i]
-		}
-		for c := range from {
-			shownPalette[i][c] = from[c] + (t.palette[i][c]-from[c])*ease
-		}
-	}
-	t.shownColor, t.shownPalette, t.shownValid = shown, shownPalette, true
-	return shown, append([][3]float64(nil), shownPalette...)
-}
 
 func newSpectrumTap(coverDir string) *spectrumTap {
 	return &spectrumTap{
@@ -398,15 +339,16 @@ func blackArtwork(rgb [3]float64) bool {
 	return math.Max(rgb[0], math.Max(rgb[1], rgb[2])) < 0.08
 }
 
-func (t *spectrumTap) solidFrame(n int, level uint8) []string {
+func (t *spectrumTap) rawSolidFrame(n int, level uint8) []string {
 	if n <= 0 {
 		return nil
 	}
 	t.mu.Lock()
-	rgb, palette := t.easedArtwork(time.Now())
+	rgb, palette := t.coverColor, append([][3]float64(nil), t.palette...)
 	haveColor := t.haveCoverColor
 	gain, neutralBlack := t.gain, t.neutralBlack
 	blackFloor := t.blackFloor
+	blackColor := t.blackColor
 	t.mu.Unlock()
 	if !haveColor {
 		return nil
@@ -420,7 +362,7 @@ func (t *spectrumTap) solidFrame(n int, level uint8) []string {
 	}
 	frame := make([]string, n)
 	if blackArtwork(rgb) {
-		color := solidHex(rgb, gain, scale, neutralBlack, blackFloor)
+		color := solidHex(rgb, gain, scale, neutralBlack, blackFloor, blackColor)
 		for i := range frame {
 			frame[i] = color
 		}
@@ -430,11 +372,11 @@ func (t *spectrumTap) solidFrame(n int, level uint8) []string {
 		// Spread the cover's clusters over the zones so a logo or ring reads
 		// as the artwork instead of one flat tint.
 		for i := range frame {
-			frame[i] = solidHex(palette[i*len(palette)/n], gain, scale, neutralBlack, blackFloor)
+			frame[i] = solidHex(palette[i*len(palette)/n], gain, scale, neutralBlack, blackFloor, blackColor)
 		}
 		return frame
 	}
-	color := solidHex(rgb, gain, scale, neutralBlack, blackFloor)
+	color := solidHex(rgb, gain, scale, neutralBlack, blackFloor, blackColor)
 	for i := range frame {
 		frame[i] = color
 	}
@@ -444,7 +386,7 @@ func (t *spectrumTap) solidFrame(n int, level uint8) []string {
 // solidHex converts one artwork colour to a frame entry. Match the spectrum
 // frame: a black cover stays dark instead of inventing a tint, except on the
 // model whose stock fallback is deliberately blue.
-func solidHex(rgb, gain [3]float64, scale float64, neutralBlack bool, blackFloor float64) string {
+func solidHex(rgb, gain [3]float64, scale float64, neutralBlack bool, blackFloor float64, blackColor *[3]float64) string {
 	// A black cover stays off, keeps the stock dark fallback on Mini 2, or
 	// glows faint violet on Station 2 and Lite 2; only a real artwork colour
 	// is lifted.
@@ -456,7 +398,12 @@ func solidHex(rgb, gain [3]float64, scale float64, neutralBlack bool, blackFloor
 		// A solid frame has no PCM lift; twice the animated floor keeps the
 		// black-cover glow visible and matches the spectrum frame.
 		rgb = [3]float64{0.55, 0.30, 0.85}
-		scale *= 0.14
+		if blackColor != nil {
+			rgb = *blackColor
+		}
+		scale *= blackFloor * 2
+	case dark:
+		rgb = [3]float64{}
 	}
 	// A dark cover still has to read as its hue on the LEDs: lift the value
 	// to the visibility floor, the way the artwork tint is meant to be seen.
@@ -470,18 +417,19 @@ func solidHex(rgb, gain [3]float64, scale float64, neutralBlack bool, blackFloor
 	return fmt.Sprintf("#%02X%02X%02X", int(r*255), int(g*255), int(b*255))
 }
 
-func (t *spectrumTap) frame(n int, level uint8) []string {
+func (t *spectrumTap) rawFrame(n int, level uint8) []string {
 	if n <= 0 {
 		return nil
 	}
 	t.mu.Lock()
 	history := t.state.history
 	hue, haveHue, mono, luma := t.hue, t.haveHue, t.mono, t.luma
-	rgb, _ := t.easedArtwork(time.Now())
+	rgb := t.coverColor
 	haveColor := t.haveCoverColor
 	brightness := t.brightness
 	gain, neutralBlack := t.gain, t.neutralBlack
 	blackFloor, ceiling, satBoost := t.blackFloor, t.ceiling, t.satBoost
+	blackColor := t.blackColor
 	if satBoost < 1 {
 		satBoost = 1
 	}
@@ -537,7 +485,12 @@ func (t *spectrumTap) frame(n int, level uint8) []string {
 					// dim violet glow instead of a dead ring, and the beat
 					// lifts it.
 					cr, cg, cb = 0.55, 0.30, 0.85
+					if blackColor != nil {
+						cr, cg, cb = blackColor[0], blackColor[1], blackColor[2]
+					}
 					intensity = math.Min(1, blackFloor+value*0.12)
+				default:
+					cr, cg, cb = 0, 0, 0
 				}
 			}
 			// Keep the real RGB ratios, apply the per-model white balance, and

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -112,6 +113,9 @@ func runWithControls(ctx context.Context, sharedAudio bool, controls *controlsCo
 		return fmt.Errorf("unsupported YAM model %q", d.Model)
 	}
 	p = profileWithTiming(p, controls)
+	if controls != nil && controls.Equalizer != nil && controls.Equalizer.Enabled {
+		p.eqConfigPath = controls.configPath
+	}
 	fmt.Fprintf(os.Stderr, "station-airplay: timing mode=%s offset=%.1fs (receiver restart required to change)\n",
 		p.timingMode, p.latencyOffset())
 	// A model whose control profile is not qualified still has to play audio:
@@ -482,6 +486,18 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 	if err = preflight(p); err != nil {
 		return err
 	}
+	var eqBlock string
+	if p.eqConfigPath != "" {
+		if _, err = exec.LookPath("aplay"); err != nil {
+			return errors.New("experimental EQ requires firmware aplay; disable equalizer to restore direct ALSA")
+		}
+		eqBlock = eqAsound(exe, p.eqConfigPath, p.pcm, profileOutputRate(p))
+		p.pcm = "spk_equalizer"
+		if err = os.WriteFile(filepath.Join(state, ".asoundrc"), nil, 0600); err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stderr, "station-airplay: experimental AirPlay-only EQ enabled; pipe timing and CPU require live validation")
+	}
 	var metaFD, audioFD int
 	// -1 means "no analyser FIFO": a solid artwork frame reads only the
 	// receiver's cover cache.
@@ -571,6 +587,20 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 			}
 		}
 		go tap.run(ctx, spectrumFD)
+	}
+	if eqBlock != "" {
+		file, e := os.OpenFile(filepath.Join(state, ".asoundrc"), os.O_APPEND|os.O_WRONLY, 0600)
+		if e != nil {
+			return e
+		}
+		_, e = file.WriteString(eqBlock)
+		closeErr := file.Close()
+		if e != nil {
+			return e
+		}
+		if closeErr != nil {
+			return closeErr
+		}
 	}
 	for _, port := range []int{319, 320, 9000} {
 		socket, e := net.ListenPacket("udp4", fmt.Sprintf(":%d", port))
