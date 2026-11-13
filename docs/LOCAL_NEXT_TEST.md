@@ -1,12 +1,13 @@
 # Local next-version test build (not a release)
 
-AirPlay `2.1.7-dev.1` pairs with the local Luna calibration-panel branch.
+AirPlay `2.1.7-dev.2` pairs with local Luna `0.2.27-panel.2`.
 The receiver still works with official Luna 0.2.26, but the new web panel
 requires the local Luna build. There is no new published dependency.
 
 ## Implemented
 
 - Explicit synchronized/fast-audio presentation-time modes.
+- Fast audio (-1.7 s) is the default on every model; synchronized is opt-in.
 - `/calibration` in Luna: RGB/HSV/hex, per-zone colour, test patterns, local
   image sampling, gains, brightness, saturation and dark-cover tint/floor.
 - Device-side presets and portable JSON import/export. Voice/permissions are

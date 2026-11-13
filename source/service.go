@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	version             = "Station airplay 2.1.7-dev.1"
+	version             = "Station airplay 2.1.7-dev.2"
 	audioFIFO           = "/tmp/sps.fifo"
 	spectrumFIFO        = "/tmp/sps-spectrum.fifo"
 	metadataFIFO        = "/tmp/shairport-sync-ap2-metadata"
