@@ -245,6 +245,7 @@ func nativePercent(v float64) (int, error) {
 }
 
 type sharedController struct {
+	device                      yamDevice
 	preview                     *ledPreview
 	volumeStep                  int // Zero retains the historical sender step.
 	cfg                         controlsConfig

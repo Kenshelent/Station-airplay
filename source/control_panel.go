@@ -76,6 +76,8 @@ func startControlPanel(ctx context.Context, c *sharedController, path, socket st
 			return
 		}
 		respond(w, 200, map[string]any{"preview": c.preview.status(time.Now()), "led_count": c.ledCount,
+			"model": c.device.Model, "defaults": panelDefaults(c.device),
+			"zones":           []map[string]any{{"id": "artwork", "count": c.ledCount, "supported": c.cfg.LEDs && c.ledCount > 0}},
 			"equalizer_scope": "AirPlay only", "settings_apply": "restart", "timing_modes": []string{timingSynchronized, timingFastAudio}})
 	})
 	mux.HandleFunc("/preview", func(w http.ResponseWriter, r *http.Request) {
@@ -130,6 +132,20 @@ func startControlPanel(ctx context.Context, c *sharedController, path, socket st
 	stop := func() { _ = server.Close(); _ = os.Remove(socket) }
 	go func() { <-ctx.Done(); _ = server.Close() }()
 	return stop, nil
+}
+
+// Model tuning is supplied by the same backend functions as the renderer, not
+// a private device list or a second set of guesses embedded in the browser.
+func panelDefaults(d yamDevice) controlsConfig {
+	gain, profile, _, _ := spectrumDefaults(d, controlsConfig{})
+	floor, _, saturation := spectrumComfort(d)
+	on := d.Model != "yandexmini"
+	brightness := 1.0
+	if d.Model == "yandexmini_2" || d.Model == "plum" || d.Model == "yandexplum" {
+		brightness = 1.25
+	}
+	return controlsConfig{TimingMode: timingFastAudio, Spectrum: &on, SpectrumGainR: gain[0], SpectrumGainG: gain[1], SpectrumGainB: gain[2],
+		SpectrumBrightness: brightness, SpectrumSaturation: saturation, SpectrumBlackFloor: &floor, SpectrumBlackColor: "#8C4CD9", LEDLevel: 200, LEDColorProfile: profile}
 }
 
 func savePanelSettings(path string, data []byte) error {

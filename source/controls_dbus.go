@@ -163,6 +163,7 @@ func serveControlsUI(ctx context.Context, bus string, api *yamAPI, d yamDevice, 
 		}
 	}
 	c := &sharedController{cfg: cfg, receiver: r, station: station, ledCount: ledCount, rendererUpdate: observer, spectrum: spectrum}
+	c.device = d
 	c.preview = &ledPreview{}
 	previewCtx, stopPreview := context.WithCancel(ctx)
 	previewDone := make(chan struct{})
