@@ -101,6 +101,19 @@ class IntegrityTests(unittest.TestCase):
             self.assertEqual(library.stat().st_mode & 0o777, 0o644)
             self.assertEqual(binary.read_bytes(), source.read_bytes())
 
+    def test_legacy_runtime_is_never_upx_packed(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(pkg, "slim_runtime", return_value=["packed"]) as pack:
+            plugin = Path(temp)
+            self.assertEqual(pkg.pack_runtime_for_target(plugin, {"target": "yandexmini"}), [])
+            pack.assert_not_called()
+            self.assertEqual(pkg.pack_runtime_for_target(plugin, {"target": "yandexmini_2"}), ["packed"])
+            pack.assert_called_once()
+            path = plugin / "bin/dbus-daemon"
+            path.parent.mkdir()
+            path.write_bytes(b"\\x7fELF-UPX!")
+            with self.assertRaisesRegex(SystemExit, "must be unpacked"):
+                pkg.pack_runtime_for_target(plugin, {"target": "yandexmini"})
+
 
 if __name__ == "__main__":
     unittest.main()

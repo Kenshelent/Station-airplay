@@ -390,6 +390,10 @@ def verify_output(package, target, binary, version, launcher):
             for relative in LEGACY_RUNTIME:
                 if runtime_key(relative) not in manifest["files_sha256"]:
                     raise SystemExit("%s: missing legacy runtime %s" % (package, relative))
+            for name in (*RUNTIME_BINARIES, "avahi-namespace"):
+                data = archive.extractfile(str(PLUGIN_REL / "bin" / name)).read()
+                if b"UPX!" in data[:4096]:
+                    raise SystemExit("%s: Mini runtime must be unpacked: %s" % (package, name))
         payload = archive.extractfile(str(PLUGIN_REL / "bin/station-airplay")).read()
         if payload != binary:
             raise SystemExit("%s: supervisor payload mismatch" % package)
@@ -488,6 +492,18 @@ def slim_runtime(plugin, executable="upx"):
     return records
 
 
+def pack_runtime_for_target(plugin, target, executable="upx"):
+    # UPX removes the dynamic section that an explicit ld-linux invocation
+    # needs. Mini's private loader must see the original dynamic ELF files.
+    if target["target"] in LEGACY_TARGETS:
+        for name in (*RUNTIME_BINARIES, "avahi-namespace"):
+            path = plugin / "bin" / name
+            if path.is_file() and b"UPX!" in path.read_bytes()[:4096]:
+                raise SystemExit("Mini legacy runtime must be unpacked: %s" % name)
+        return []
+    return slim_runtime(plugin, executable)
+
+
 def find_base(base_dir, name):
     exact = Path(base_dir) / ("%s.yampkg" % name)
     if exact.is_file():
@@ -525,7 +541,7 @@ def build_target(
         packed = []
         if slim:
             reconcile_runtime(plugin, manifest, target)
-            packed = slim_runtime(plugin, upx)
+            packed = pack_runtime_for_target(plugin, target, upx)
         postinstall_src = ROOT / "release/yampkg/airplay-postinstall.sh"
         if postinstall_src.is_file():
             postinstall_dst = Path(stage) / "files/bin/airplay-postinstall"
