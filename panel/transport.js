@@ -1,0 +1,56 @@
+// Same-origin transport for official Luna 0.2.26. No browser runtime tokens.
+let rpcEpoch='',rpcQueue=Promise.resolve();
+const pendingReads=new Map();
+function requestID(){
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
+}
+async function invokePanel(request){
+  // Retries keep EXACTLY the same ID, epoch and payload. The receiver caches
+  // the outcome independently of the helper process cancelled by another tab.
+  const deadline=performance.now()+12000;
+  let lastInvoke=-Infinity,attempt='';
+  while(performance.now()<deadline){
+    if(performance.now()-lastInvoke>1600+Math.random()*400){
+      attempt=requestID();
+      const response=await fetch('/api/plugins/airplay.panel-command/invoke',{
+        method:'POST',headers:{'Content-Type':'application/json','X-Luna-Local':'1'},
+        body:JSON.stringify({args:[JSON.stringify({request,attempt})]})
+      });
+      if(!response.ok)throw Error('Включите AirPlay Panel Command в Luna: HTTP '+response.status);
+      lastInvoke=performance.now();
+    }
+    const response=await fetch('/api/plugins/airplay.panel-command/logs',{cache:'no-store'});
+    if(!response.ok)throw Error('Не удалось получить ответ helper');
+    const lines=(await response.text()).split('\n');
+    for(let i=lines.length-1;i>=0;i--){
+      if(!lines[i].startsWith('AP1 '))continue;
+      let result;
+      try{
+        const bytes=Uint8Array.from(atob(lines[i].slice(4)),c=>c.charCodeAt(0));
+        result=JSON.parse(new TextDecoder().decode(bytes));
+      }catch{continue;} // Partial output from a cancelled helper is not a reply.
+      if(result.id!==request.id||result.attempt!==attempt)continue;
+      if(result.status===503)continue;
+      if(rpcEpoch && result.epoch!==rpcEpoch)throw Error('AirPlay перезапущен. Обновите страницу.');
+      rpcEpoch=result.epoch;
+      if(result.status<200||result.status>=300)throw Error(result.body?.error||'HTTP '+result.status);
+      return result.body;
+    }
+    await new Promise(resolve=>setTimeout(resolve,150+Math.random()*150));
+  }
+  throw Error('Ответ не получен. Операция могла выполниться; обновите настройки перед повтором.');
+}
+function api(path,method='GET',body){
+  const key=method==='GET'?path:null;
+  if(key&&pendingReads.has(key))return pendingReads.get(key);
+  const task=rpcQueue.catch(()=>{}).then(()=>invokePanel({
+    id:requestID(),epoch:rpcEpoch,operation:path,method,
+    ...(body===undefined?{}:{body})
+  }));
+  rpcQueue=task;
+  if(key){
+    pendingReads.set(key,task);
+    task.finally(()=>{if(pendingReads.get(key)===task)pendingReads.delete(key);}).catch(()=>{});
+  }
+  return task;
+}

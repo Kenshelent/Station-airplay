@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"station-airplay/internal/panelrpc"
 )
 
 const panelSocket = "/run/station-airplay/control.sock"
@@ -127,6 +129,9 @@ func startControlPanel(ctx context.Context, c *sharedController, path, socket st
 		}
 		respond(w, 200, map[string]any{"id": id, "ttl_ms": previewTTL.Milliseconds(), "sent": sent})
 	})
+	mux.HandleFunc("/presets", panelPresets(filepath.Join(filepath.Dir(path), "airplay-panel-presets.json")))
+	broker := panelrpc.New(mux)
+	mux.Handle("/rpc", broker)
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 3 * time.Second, WriteTimeout: 3 * time.Second}
 	go func() { _ = server.Serve(l) }()
 	stop := func() { _ = server.Close(); _ = os.Remove(socket) }

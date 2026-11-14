@@ -41,6 +41,11 @@ jobs:
         run: |
           (cd source && go test -race -count=1 ./...)
           python3 tests/test_stream_gain.py
+      - name: Plugin panel transport regressions
+        run: |
+          python3 panel/make-page.py
+          git diff --exit-code -- panel/index.html
+          node panel/test-transport.cjs panel/transport.js
       - name: Host migration and namespace checks
         run: |
           python3 tests/test_host_migration.py
