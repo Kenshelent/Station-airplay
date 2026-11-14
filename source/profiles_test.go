@@ -85,9 +85,8 @@ func TestSharedProfilesKeepProvenAudioContract(t *testing.T) {
 	}
 }
 
-// The short back-end buffer and the latency offset were measured on the live
-// Mini and then rolled out to every shared profile. The offset gives up
-// multi-room sync with other AirPlay receivers on each of them.
+// The short backend buffer is independent of presentation-time offset. Default
+// profiles retain the owner's fast-audio default on every model.
 func TestSharedReceiverKeepsShortBackendBuffer(t *testing.T) {
 	for _, model := range []string{"yandexmini", "yandexmini_2", "yandexstation_2", "yandexmidi", "yandexplum", "yandexmicro"} {
 		p, ok := profileFor(model)

@@ -113,6 +113,11 @@ func renderDisplay(ctx context.Context, api *yamAPI, metaFD int, exits <-chan ex
 				return fmt.Errorf("metadata FIFO: %w", e)
 			}
 			state.rotate()
+			// The preview worker is the sole LED writer during its bounded lease.
+			// Keep draining metadata/PCM; do not stop the receiver or Alice.
+			if controlUI.Preview && now.Before(controlUI.Expires) {
+				continue
+			}
 			paused := musicPolicy != nil && state.status == "paused"
 			if isMidiProfile(p) || p.sharedUI {
 				paint := state.pcmUIActive(now)

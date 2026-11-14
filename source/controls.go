@@ -18,9 +18,17 @@ import (
 )
 
 type controlsConfig struct {
+	configPath string
 	// DefaultsVersion records which release's defaults this file has already
 	// been migrated through; missing means 2.1.4 or older.
 	DefaultsVersion int `json:"defaults_version,omitempty"`
+	// TimingMode is independent of shared-control capabilities. Empty means
+	// fast_audio: deliberately advance sound by 1.7 s on every model.
+	TimingMode         string           `json:"timing_mode,omitempty"`
+	Equalizer          *equalizerConfig `json:"equalizer,omitempty"`
+	SpectrumBlackFloor *float64         `json:"spectrum_black_floor,omitempty"`
+	SpectrumBlackColor string           `json:"spectrum_black_color,omitempty"`
+	SpectrumSaturation float64          `json:"spectrum_saturation,omitempty"`
 	// Omitted keeps the LED spectrum on; false restores the solid indication
 	// frames without opening a PCM tap or reading cover art.
 	Spectrum           *bool        `json:"spectrum,omitempty"`
@@ -69,6 +77,7 @@ func loadControls(path string) (*controlsConfig, error) {
 	d := json.NewDecoder(io.LimitReader(f, 16385))
 	d.DisallowUnknownFields()
 	var c controlsConfig
+	c.configPath = path
 	if err = d.Decode(&c); err != nil {
 		return nil, err
 	}
@@ -77,6 +86,21 @@ func loadControls(path string) (*controlsConfig, error) {
 	}
 	if c.SpectrumBrightness < 0 || c.SpectrumBrightness > 2 {
 		return nil, errors.New("spectrum_brightness must be between 0 and 2")
+	}
+	if err := c.validateTiming(); err != nil {
+		return nil, err
+	}
+	if err := c.Equalizer.validate(); err != nil {
+		return nil, err
+	}
+	if c.SpectrumBlackFloor != nil && (*c.SpectrumBlackFloor < 0 || *c.SpectrumBlackFloor > 0.3) {
+		return nil, errors.New("spectrum_black_floor must be 0..0.3")
+	}
+	if c.SpectrumBlackColor != "" && !previewColor.MatchString(c.SpectrumBlackColor) {
+		return nil, errors.New("spectrum_black_color must be #RRGGBB")
+	}
+	if c.SpectrumSaturation < 0 || c.SpectrumSaturation > 2 || c.SpectrumSaturation > 0 && c.SpectrumSaturation < 1 {
+		return nil, errors.New("spectrum_saturation must be 1..2 (0=model default)")
 	}
 	for _, gain := range []float64{c.SpectrumGainR, c.SpectrumGainG, c.SpectrumGainB} {
 		if gain < 0 || gain > 4 {
@@ -221,6 +245,8 @@ func nativePercent(v float64) (int, error) {
 }
 
 type sharedController struct {
+	device                      yamDevice
+	preview                     *ledPreview
 	volumeStep                  int // Zero retains the historical sender step.
 	cfg                         controlsConfig
 	receiver                    controlReceiver
@@ -237,6 +263,7 @@ type sharedController struct {
 	spectrum                    *spectrumTap
 	ledMu                       sync.Mutex
 	ledPlay, ledFailed          atomic.Bool
+	ledSolid                    atomic.Bool
 	observedNative              int
 	nativeObserved              bool
 	aliceIdle                   bool
@@ -265,6 +292,9 @@ type sharedController struct {
 }
 
 func (c *sharedController) speech(ctx context.Context, e speechEvent, now time.Time) error {
+	if e.Phase != "idle" {
+		c.preview.gate(now, false, "Alice active")
+	}
 	// Enum names come from the public Quasar AliceState schema. A lost IPC
 	// observer is UNKNOWN, never fabricated IDLE. Gain also expires in receiver.
 	aliceButtonDebug("speech: phase=%q final=%v initial=%v request=%v active=%v", e.Phase, e.Final, e.InitialSnapshot, e.RequestID != "", c.active)
@@ -530,8 +560,10 @@ func (c *sharedController) stopButtonSuppression() {
 
 func (c *sharedController) tick(ctx context.Context, now time.Time) error {
 	c.ledPlay.Store(false)
+	c.ledSolid.Store(false)
 	s, err := c.receiver.State(ctx)
 	if err != nil {
+		c.preview.gate(now, false, "receiver unavailable")
 		c.buttonSession.Store(false)
 		c.audioActive = false
 		c.volumeReady = false
@@ -596,6 +628,25 @@ func (c *sharedController) tick(ctx context.Context, now time.Time) error {
 				return err
 			}
 		}
+		if c.preview.active(now) {
+			reason := ""
+			if !c.aliceIdle {
+				reason = "Alice active"
+			} else if now.Before(c.ledQuietUntil) {
+				reason = "volume overlay"
+			}
+			volumeOK := true
+			if c.cfg.NativeVolume {
+				value, volumeErr := c.station.GetVolume(ctx)
+				if volumeErr != nil {
+					volumeOK, reason = false, "native volume unavailable"
+				} else {
+					c.preview.observeVolume(value, now)
+				}
+			}
+			c.preview.gate(now, volumeOK && c.cfg.LEDs && c.aliceIdle && !now.Before(c.ledQuietUntil), reason)
+			return nil
+		}
 		c.releaseRing(ctx)
 		if c.ledOwned {
 			c.ledOwned = false
@@ -646,6 +697,16 @@ func (c *sharedController) tick(ctx context.Context, now time.Time) error {
 	if c.cfg.NativeVolume {
 		volumeErr = c.syncVolume(ctx, s, now)
 	}
+	if c.preview.active(now) {
+		reason := ""
+		if !c.aliceIdle {
+			reason = "Alice active"
+		} else if now.Before(c.ledQuietUntil) {
+			reason = "volume overlay"
+		}
+		c.preview.gate(now, c.cfg.LEDs && c.aliceIdle && !c.ledSuspended && !now.Before(c.ledQuietUntil), reason)
+		return errors.Join(nativeErr, volumeErr)
+	}
 	// Sender feedback must not gate unrelated indication. Repaint slowly after
 	// native volume has settled: its overlay can replace our one-shot frame.
 	// An observed legacy renderer remains the sole UI owner. Keep LEDs in
@@ -664,6 +725,9 @@ func (c *sharedController) tick(ctx context.Context, now time.Time) error {
 		c.ledOwned, c.ledState = false, ""
 	}
 	if ledAllowed {
+		if c.spectrum != nil && !c.ledFailed.Load() {
+			c.ledSolid.Store(true)
+		}
 
 		state := "playing"
 		if !s.Active || now.Before(c.pausedUntil) {
@@ -677,10 +741,11 @@ func (c *sharedController) tick(ctx context.Context, now time.Time) error {
 				level = 16 // retain the original opt-in default
 			}
 		}
-		if state == "playing" && c.spectrum != nil && !c.ledFailed.Load() && c.spectrum.playing(now) {
+		if state == "playing" && c.cfg.useSpectrum() && c.spectrum != nil && !c.ledFailed.Load() && c.spectrum.playing(now) {
 			// The dedicated animator paints at 10 Hz. The tick only publishes
 			// the gate and keeps the same ownership bookkeeping.
 			c.ledPlay.Store(true)
+			c.ledSolid.Store(false)
 			c.ledOwned = true
 			c.ledState = "playing"
 			c.ledRefreshAt = now.Add(100 * time.Millisecond)
@@ -865,6 +930,17 @@ func (c *sharedController) applySenderVolume(ctx context.Context, s receiverStat
 
 // Stop must not restore Master, restart Alice, touch clocks, or paint over Alice.
 func (c *sharedController) close(ctx context.Context) {
+	c.ledPlay.Store(false)
+	c.ledSolid.Store(false)
+	if c.preview != nil {
+		c.preview.gate(time.Now(), false, "service stopped")
+		c.preview.mu.Lock()
+		if c.preview.drawn && c.aliceIdle {
+			c.ledOwned = true
+		}
+		c.preview.id, c.preview.colors, c.preview.drawn = "", nil, false
+		c.preview.mu.Unlock()
+	}
 	if c.cfg.Ducking {
 		_ = c.receiver.Gain(ctx, 100, 0)
 	}

@@ -10,6 +10,7 @@ type rendererControlState struct {
 	Paint       bool
 	VolumeKnown bool
 	Volume      int
+	Preview     bool
 	Expires     time.Time
 }
 
@@ -28,6 +29,7 @@ func (c *sharedController) rendererState(now time.Time) rendererControlState {
 		Paint:       c.aliceIdle && !c.ledSuspended && now.Before(c.speechFreshUntil),
 		VolumeKnown: c.nativeObserved,
 		Volume:      c.observedNative,
+		Preview:     c.preview.active(now),
 		Expires:     now.Add(2 * time.Second),
 	}
 }

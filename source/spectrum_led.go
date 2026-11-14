@@ -29,15 +29,25 @@ func runSpectrumLEDs(ctx context.Context, c *sharedController, tap *spectrumTap,
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if !c.ledPlay.Load() {
+			if c.preview.active(time.Now()) {
+				continue
+			}
+			if !c.ledPlay.Load() && !c.ledSolid.Load() {
 				continue
 			}
 			colors := tap.frame(c.ledCount, level)
+			if c.ledSolid.Load() {
+				colors = tap.solidFrame(c.ledCount, level)
+			}
 			if len(colors) == 0 {
 				continue
 			}
 			c.ledMu.Lock()
-			if !c.ledPlay.Load() {
+			if c.preview.active(time.Now()) {
+				c.ledMu.Unlock()
+				continue
+			}
+			if !c.ledPlay.Load() && !c.ledSolid.Load() {
 				c.ledMu.Unlock()
 				continue
 			}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -111,6 +112,12 @@ func runWithControls(ctx context.Context, sharedAudio bool, controls *controlsCo
 	if !ok {
 		return fmt.Errorf("unsupported YAM model %q", d.Model)
 	}
+	p = profileWithTiming(p, controls)
+	if controls != nil && controls.Equalizer != nil && controls.Equalizer.Enabled {
+		p.eqConfigPath = controls.configPath
+	}
+	fmt.Fprintf(os.Stderr, "station-airplay: timing mode=%s offset=%.1fs (receiver restart required to change)\n",
+		p.timingMode, p.latencyOffset())
 	// A model whose control profile is not qualified still has to play audio:
 	// Station 3 and Mini 3 Pro have no qualified shared-control transport, and
 	// refusing to start left them with a dead plugin.
@@ -233,11 +240,10 @@ func receiverConfig(p stationProfile) string {
  // Stay well inside AirPlay's own buffering: the stock 0.2 s backend buffer
  // adds avoidable start-up and resume delay in front of the shared mixer.
  audio_backend_buffer_desired_length_in_seconds = 0.10;
- // Play 1.7 s ahead of the negotiated latency: about 2 s from the sender
- // minus the 0.1 s back-end buffer leaves the buffer that survived the live
- // Mini. The offset trades multi-room sync with other AirPlay receivers;
- // lower it if the link underruns.
- audio_backend_latency_offset_in_seconds = -1.7;
+ // Synchronized mode preserves negotiated AirPlay presentation time.
+ // fast_audio explicitly trades video/multiroom synchronization for a
+ // shorter apparent delay; backend buffering is independent of this mode.
+ audio_backend_latency_offset_in_seconds = %.1f;
 };
 sessioncontrol = { allow_session_interruption = "yes"; session_timeout = 60; };
 alsa = {
@@ -248,7 +254,7 @@ alsa = {
  disable_standby_mode = "never";
 };
 %s
-`, p.name, p.airplayModel, device, profileOutputRate(p), meta)
+`, p.name, p.airplayModel, p.latencyOffset(), device, profileOutputRate(p), meta)
 }
 
 // uiAsound is the receiver's private ~/.asoundrc. The file plugin feeds the
@@ -293,6 +299,7 @@ func uiAsoundSpectrum(pcm, clockFIFO, spectrumFIFO string) string {
 }
 
 func receiverControlConfig(p stationProfile, controls *controlsConfig, artwork ...bool) string {
+	p = profileWithTiming(p, controls)
 	config := receiverConfig(p)
 	if controls == nil {
 		return config
@@ -409,6 +416,30 @@ func dbusCommand(root string, p stationProfile, tool string) (string, []string) 
 	return filepath.Join(root, "bin", tool), nil
 }
 
+// legacyRuntimeLoader reports the bundled armhf loader when a package carries
+// its own libc. Only the original Mini firmware is old enough to need it: its
+// glibc is 2.23 while the rebuilt runtime needs 2.25..2.29. Packages for newer
+// firmware do not contain the loader and keep using the firmware libc.
+func legacyRuntimeLoader(root string) string {
+	path := filepath.Join(root, "lib", "ld-linux-armhf.so.3")
+	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+		return path
+	}
+	return ""
+}
+
+// withLegacyRuntime runs a packaged binary through the bundled loader so the
+// package libc, not the firmware one, resolves its symbols. Firmware tools and
+// packages without the loader are returned unchanged.
+func withLegacyRuntime(root, bin string, args []string) (string, []string) {
+	loader := legacyRuntimeLoader(root)
+	prefix := filepath.Join(root, "bin") + string(filepath.Separator)
+	if loader == "" || !strings.HasPrefix(bin, prefix) {
+		return bin, args
+	}
+	return loader, append([]string{"--library-path", filepath.Join(root, "lib"), bin}, args...)
+}
+
 func firmwareALSA(p stationProfile) string {
 	if p.alsaLib != "" {
 		return p.alsaLib
@@ -478,6 +509,18 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 	defer syscall.Flock(int(lk.Fd()), syscall.LOCK_UN)
 	if err = preflight(p); err != nil {
 		return err
+	}
+	var eqBlock string
+	if p.eqConfigPath != "" {
+		if _, err = exec.LookPath("aplay"); err != nil {
+			return errors.New("experimental EQ requires firmware aplay; disable equalizer to restore direct ALSA")
+		}
+		eqBlock = eqAsound(exe, p.eqConfigPath, p.pcm, profileOutputRate(p))
+		p.pcm = "spk_equalizer"
+		if err = os.WriteFile(filepath.Join(state, ".asoundrc"), nil, 0600); err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stderr, "station-airplay: experimental AirPlay-only EQ enabled; pipe timing and CPU require live validation")
 	}
 	var metaFD, audioFD int
 	// -1 means "no analyser FIFO": a solid artwork frame reads only the
@@ -569,6 +612,20 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 		}
 		go tap.run(ctx, spectrumFD)
 	}
+	if eqBlock != "" {
+		file, e := os.OpenFile(filepath.Join(state, ".asoundrc"), os.O_APPEND|os.O_WRONLY, 0600)
+		if e != nil {
+			return e
+		}
+		_, e = file.WriteString(eqBlock)
+		closeErr := file.Close()
+		if e != nil {
+			return e
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+	}
 	for _, port := range []int{319, 320, 9000} {
 		socket, e := net.ListenPacket("udp4", fmt.Sprintf(":%d", port))
 		if e != nil {
@@ -629,6 +686,7 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 		return env
 	}
 	launch := func(name, bin string, args ...string) error {
+		bin, args = withLegacyRuntime(root, bin, args)
 		return launchWith(name, bin, childEnv(bin), args...)
 	}
 	if err = startPrivateMDNS(ctx, root, state, p, childEnv, launch, exits); err != nil {
@@ -649,7 +707,8 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 				childEnv = runtimeEnv(env, libs, firmwareALSA(p))
 			}
 		}
-		return launchWith(name, filepath.Join(root, "bin", binary), childEnv, args...)
+		path, args := withLegacyRuntime(root, filepath.Join(root, "bin", binary), args)
+		return launchWith(name, path, childEnv, args...)
 	}
 	if err = launchAP2("nqptp", "-v"); err != nil {
 		return err

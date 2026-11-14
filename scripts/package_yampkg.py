@@ -87,6 +87,18 @@ REPLACE_RUNTIME = (
     "lib/libdbus-1.so.3",
     "lib/libplist-2.0.so.3",
 )
+LEGACY_TARGETS = frozenset({"yandexmini"})
+# Kept from the verified base payload, never installed into the firmware /lib.
+LEGACY_RUNTIME = (
+    "lib/ld-linux-armhf.so.3",
+    "lib/libc.so.6",
+    "lib/libm.so.6",
+    "lib/libdl.so.2",
+    "lib/libpthread.so.0",
+    "lib/librt.so.1",
+    "lib/libresolv.so.2",
+    "lib/libgcc_s.so.1",
+)
 
 
 def sha256_bytes(data):
@@ -313,9 +325,11 @@ def patch_manifest(manifest, target, version, stage, extra_files=(), description
         if not path.is_file():
             raise SystemExit("extra file missing: %s" % destination)
         manifest["files_sha256"][relative] = sha256_file(path)
+    files = Path(stage) / "files"
     manifest["files_sha256"] = {
-        relative: sha256_file(Path(stage) / "files" / relative)
-        for relative in manifest["files_sha256"]
+        path.relative_to(files).as_posix(): sha256_file(path)
+        for path in sorted(files.rglob("*"))
+        if path.is_file()
     }
     for relative in (
         str(PLUGIN_REL / "launch-airplay.sh")[len("files/") :],
@@ -323,6 +337,41 @@ def patch_manifest(manifest, target, version, stage, extra_files=(), description
     ):
         if relative not in manifest["files_sha256"]:
             raise SystemExit("base manifest lacks %s" % relative)
+
+
+def verify_archive_payload(archive, manifest):
+    """Check both directions of the manifest and the executable tar modes."""
+    members = {}
+    for member in archive.getmembers():
+        name = member.name.removeprefix("./")
+        if name.startswith("/") or ".." in Path(name).parts:
+            raise SystemExit("unsafe output member: %s" % name)
+        if not (member.isfile() or member.isdir()):
+            raise SystemExit("unsupported output member: %s" % name)
+        if member.isdir():
+            continue
+        if name in members:
+            raise SystemExit("duplicate output member: %s" % name)
+        members[name] = member
+    payload = {
+        name[len("files/"):]: member
+        for name, member in members.items() if name.startswith("files/")
+    }
+    hashes = manifest["files_sha256"]
+    if set(payload) != set(hashes):
+        raise SystemExit("payload/manifest mismatch: unlisted=%s missing=%s" % (
+            sorted(set(payload) - set(hashes)), sorted(set(hashes) - set(payload))))
+    plugin = str(PLUGIN_REL)[len("files/"):] + "/"
+    for name, member in payload.items():
+        if sha256_bytes(archive.extractfile(member).read()) != hashes[name]:
+            raise SystemExit("output hash mismatch: %s" % name)
+        executable = (
+            name.startswith("bin/") or name.startswith(plugin + "bin/")
+            or name == plugin + "launch-airplay.sh"
+            or name == plugin + "lib/ld-linux-armhf.so.3"
+        )
+        if executable and member.mode & 0o111 != 0o111:
+            raise SystemExit("output executable mode missing: %s (%o)" % (name, member.mode))
 
 
 def verify_output(package, target, binary, version, launcher):
@@ -336,10 +385,15 @@ def verify_output(package, target, binary, version, launcher):
             raise SystemExit("%s: manifest dependency missing" % package)
         if luna_requirement_text() not in manifest.get("description", ""):
             raise SystemExit("%s: manifest description does not state %s" % (package, luna_requirement_text()))
-        for relative, expected in manifest["files_sha256"].items():
-            actual = sha256_bytes(archive.extractfile("files/" + relative).read())
-            if actual != expected:
-                raise SystemExit("%s: output hash mismatch: %s" % (package, relative))
+        verify_archive_payload(archive, manifest)
+        if target["target"] in LEGACY_TARGETS:
+            for relative in LEGACY_RUNTIME:
+                if runtime_key(relative) not in manifest["files_sha256"]:
+                    raise SystemExit("%s: missing legacy runtime %s" % (package, relative))
+            for name in (*RUNTIME_BINARIES, "avahi-namespace"):
+                data = archive.extractfile(str(PLUGIN_REL / "bin" / name)).read()
+                if b"UPX!" in data[:4096]:
+                    raise SystemExit("%s: Mini runtime must be unpacked: %s" % (package, name))
         payload = archive.extractfile(str(PLUGIN_REL / "bin/station-airplay")).read()
         if payload != binary:
             raise SystemExit("%s: supervisor payload mismatch" % package)
@@ -387,17 +441,31 @@ def runtime_key(relative):
     return str(PLUGIN_REL / relative)[len("files/"):]
 
 
-def reconcile_runtime(plugin, manifest):
-    """Use the rebuilt glibc-2.28 D-Bus and drop the redundant loader/libc."""
+def copy_payload_file(source, destination, executable=False):
+    """Source checkout permissions must not determine release executable modes."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, destination)
+    os.chmod(destination, 0o755 if executable else 0o644)
+
+
+def reconcile_runtime(plugin, manifest, target):
+    """Retain Mini's verified base libc; slim only firmware-compatible targets."""
+    legacy = target["target"] in LEGACY_TARGETS
+    if legacy:
+        for relative in LEGACY_RUNTIME:
+            path = plugin / relative
+            expected = manifest["files_sha256"].get(runtime_key(relative))
+            if not path.is_file() or expected is None or sha256_file(path) != expected:
+                raise SystemExit("missing or unverified Mini legacy runtime: %s" % relative)
     for relative in REPLACE_RUNTIME:
         source = ROOT / relative
         if not source.is_file():
             raise SystemExit("missing rebuilt runtime file: %s" % source)
         destination = plugin / relative
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, destination)
-        os.chmod(destination, 0o755 if relative.startswith("bin/") else 0o644)
+        copy_payload_file(source, destination, executable=relative.startswith("bin/"))
     for relative in PRUNE_RUNTIME:
+        if legacy and relative in LEGACY_RUNTIME:
+            continue
         path = plugin / relative
         if path.exists():
             path.unlink()
@@ -422,6 +490,18 @@ def slim_runtime(plugin, executable="upx"):
             _SLIM_CACHE[key] = (path.read_bytes(), record)
             records.append(record)
     return records
+
+
+def pack_runtime_for_target(plugin, target, executable="upx"):
+    # UPX removes the dynamic section that an explicit ld-linux invocation
+    # needs. Mini's private loader must see the original dynamic ELF files.
+    if target["target"] in LEGACY_TARGETS:
+        for name in (*RUNTIME_BINARIES, "avahi-namespace"):
+            path = plugin / "bin" / name
+            if path.is_file() and b"UPX!" in path.read_bytes()[:4096]:
+                raise SystemExit("Mini legacy runtime must be unpacked: %s" % name)
+        return []
+    return slim_runtime(plugin, executable)
 
 
 def find_base(base_dir, name):
@@ -457,10 +537,11 @@ def build_target(
 
         plugin = Path(stage) / PLUGIN_REL
         (plugin / "bin/station-airplay").write_bytes(binary)
+        os.chmod(plugin / "bin/station-airplay", 0o755)
         packed = []
         if slim:
-            reconcile_runtime(plugin, manifest)
-            packed = slim_runtime(plugin, upx)
+            reconcile_runtime(plugin, manifest, target)
+            packed = pack_runtime_for_target(plugin, target, upx)
         postinstall_src = ROOT / "release/yampkg/airplay-postinstall.sh"
         if postinstall_src.is_file():
             postinstall_dst = Path(stage) / "files/bin/airplay-postinstall"
@@ -483,9 +564,7 @@ def build_target(
             if not source_path.is_file():
                 raise SystemExit("%s: missing extra file %s" % (target["target"], source))
             destination_path = plugin / destination
-            destination_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source_path, destination_path)
-            shutil.copymode(source_path, destination_path)
+            copy_payload_file(source_path, destination_path, executable=destination.startswith("bin/"))
         patch_plugin(
             plugin / "plugin.toml",
             base_version,
@@ -494,13 +573,16 @@ def build_target(
         )
         if not target["config"]["voice"]:
             strip_voice_commands(plugin / "plugin.toml")
+        description = default_description()
+        if target["target"] in LEGACY_TARGETS:
+            description += " Приватные loader/libc для оригинальной Mini (прошивка glibc 2.23)."
         patch_manifest(
             manifest,
             target["target"],
             version,
             stage,
             extra_files.values(),
-            description=default_description(),
+            description=description,
         )
         manifest_path.write_text(
             yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True)
@@ -527,6 +609,11 @@ def build_target(
             "base_sha256": sha256_file(base),
             "binary_sha256": sha256_bytes(binary),
             "slim_runtime": packed,
+            "legacy_runtime": {
+                relative: sha256_file(plugin / relative)
+                for relative in LEGACY_RUNTIME
+                if target["target"] in LEGACY_TARGETS
+            },
         }
     finally:
         shutil.rmtree(stage)

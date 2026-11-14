@@ -36,6 +36,7 @@ jobs:
         run: |
           python3 scripts/package_yampkg.py --check
           python3 tests/test_package_yampkg.py
+          python3 tests/test_yampkg_integrity.py
       - name: Control wire and gain policy regression tests
         run: |
           (cd source && go test -race -count=1 ./...)
