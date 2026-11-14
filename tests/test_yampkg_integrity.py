@@ -87,6 +87,20 @@ class IntegrityTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "unverified Mini"):
                 pkg.reconcile_runtime(Path(temp), {"files_sha256": {}}, {"target": "yandexmini"})
 
+    def test_extra_binary_does_not_inherit_nonexecutable_checkout_mode(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source"
+            source.write_bytes(b"ELF")
+            source.chmod(0o664)
+            binary = root / "bin/shairport-sync-ap2-aarch64"
+            library = root / "lib/aarch64/libplist-2.0.so.3"
+            pkg.copy_payload_file(source, binary, executable=True)
+            pkg.copy_payload_file(source, library)
+            self.assertEqual(binary.stat().st_mode & 0o777, 0o755)
+            self.assertEqual(library.stat().st_mode & 0o777, 0o644)
+            self.assertEqual(binary.read_bytes(), source.read_bytes())
+
 
 if __name__ == "__main__":
     unittest.main()

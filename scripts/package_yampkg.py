@@ -437,6 +437,13 @@ def runtime_key(relative):
     return str(PLUGIN_REL / relative)[len("files/"):]
 
 
+def copy_payload_file(source, destination, executable=False):
+    """Source checkout permissions must not determine release executable modes."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, destination)
+    os.chmod(destination, 0o755 if executable else 0o644)
+
+
 def reconcile_runtime(plugin, manifest, target):
     """Retain Mini's verified base libc; slim only firmware-compatible targets."""
     legacy = target["target"] in LEGACY_TARGETS
@@ -451,9 +458,7 @@ def reconcile_runtime(plugin, manifest, target):
         if not source.is_file():
             raise SystemExit("missing rebuilt runtime file: %s" % source)
         destination = plugin / relative
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, destination)
-        os.chmod(destination, 0o755 if relative.startswith("bin/") else 0o644)
+        copy_payload_file(source, destination, executable=relative.startswith("bin/"))
     for relative in PRUNE_RUNTIME:
         if legacy and relative in LEGACY_RUNTIME:
             continue
@@ -516,6 +521,7 @@ def build_target(
 
         plugin = Path(stage) / PLUGIN_REL
         (plugin / "bin/station-airplay").write_bytes(binary)
+        os.chmod(plugin / "bin/station-airplay", 0o755)
         packed = []
         if slim:
             reconcile_runtime(plugin, manifest, target)
@@ -542,9 +548,7 @@ def build_target(
             if not source_path.is_file():
                 raise SystemExit("%s: missing extra file %s" % (target["target"], source))
             destination_path = plugin / destination
-            destination_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source_path, destination_path)
-            shutil.copymode(source_path, destination_path)
+            copy_payload_file(source_path, destination_path, executable=destination.startswith("bin/"))
         patch_plugin(
             plugin / "plugin.toml",
             base_version,
