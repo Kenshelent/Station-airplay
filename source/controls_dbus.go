@@ -491,6 +491,7 @@ func waitNativeVolume(ctx context.Context, v volumeControl) error {
 func configureSpectrum(d yamDevice, cfg controlsConfig, tap *spectrumTap) error {
 	gain, profile, neutralBlack, swap := spectrumDefaults(d, cfg)
 	floor, ceiling, saturation := spectrumComfort(d)
+	lut := cfg.SpectrumPoints.lut()
 	if cfg.SpectrumBlackFloor != nil {
 		floor = *cfg.SpectrumBlackFloor
 	}
@@ -513,6 +514,7 @@ func configureSpectrum(d yamDevice, cfg controlsConfig, tap *spectrumTap) error 
 	tap.mu.Lock()
 	tap.brightness = cfg.SpectrumBrightness
 	tap.gain = gain
+	tap.lut = lut
 	tap.neutralBlack = neutralBlack
 	tap.swapRB = swap
 	tap.blackFloor = floor
@@ -539,6 +541,9 @@ func configureSpectrum(d yamDevice, cfg controlsConfig, tap *spectrumTap) error 
 	}
 	fmt.Fprintf(os.Stderr, "airplay spectrum: brightness %.2f (0=default), white balance %.2f/%.2f/%.2f, neutral black %t, black floor %.2f, solid floor %.2f\n",
 		cfg.SpectrumBrightness, gain[0], gain[1], gain[2], neutralBlack, floor, solidFloor)
+	if lut != nil {
+		fmt.Fprintln(os.Stderr, "airplay spectrum: per-point colour table active")
+	}
 	return nil
 }
 

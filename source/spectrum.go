@@ -54,6 +54,9 @@ type spectrumTap struct {
 	// gain is a per-channel white balance applied to real artwork colours,
 	// never to the no-artwork neutral fallback.
 	gain [3]float64
+	// lut maps nominal artwork colours to the colours the LEDs should show.
+	// It is nil while every point is identity, keeping the old fast path.
+	lut *colorLUT
 	// matrix is the device's stock LED calibration loaded by name. swapRB
 	// pre-swaps red and blue for hosts whose Luna profile packs BGR.
 	matrix *ledColorMatrix
@@ -357,6 +360,7 @@ func (t *spectrumTap) rawSolidFrame(n int, level uint8) []string {
 	gain, neutralBlack := t.gain, t.neutralBlack
 	blackFloor, lift := t.blackFloor, t.solidFloor
 	blackColor := t.blackColor
+	lut := t.lut
 	t.mu.Unlock()
 	if lift <= 0 {
 		lift = solidMinValue
@@ -373,7 +377,7 @@ func (t *spectrumTap) rawSolidFrame(n int, level uint8) []string {
 	}
 	frame := make([]string, n)
 	if blackArtwork(rgb) {
-		color := solidHex(rgb, gain, scale, neutralBlack, blackFloor, blackColor, lift)
+		color := solidHex(rgb, gain, scale, neutralBlack, blackFloor, blackColor, lift, lut)
 		for i := range frame {
 			frame[i] = color
 		}
@@ -383,11 +387,11 @@ func (t *spectrumTap) rawSolidFrame(n int, level uint8) []string {
 		// Spread the cover's clusters over the zones so a logo or ring reads
 		// as the artwork instead of one flat tint.
 		for i := range frame {
-			frame[i] = solidHex(palette[i*len(palette)/n], gain, scale, neutralBlack, blackFloor, blackColor, lift)
+			frame[i] = solidHex(palette[i*len(palette)/n], gain, scale, neutralBlack, blackFloor, blackColor, lift, lut)
 		}
 		return frame
 	}
-	color := solidHex(rgb, gain, scale, neutralBlack, blackFloor, blackColor, lift)
+	color := solidHex(rgb, gain, scale, neutralBlack, blackFloor, blackColor, lift, lut)
 	for i := range frame {
 		frame[i] = color
 	}
@@ -397,7 +401,7 @@ func (t *spectrumTap) rawSolidFrame(n int, level uint8) []string {
 // solidHex converts one artwork colour to a frame entry. Match the spectrum
 // frame: a black cover stays dark instead of inventing a tint, except on the
 // model whose stock fallback is deliberately blue.
-func solidHex(rgb, gain [3]float64, scale float64, neutralBlack bool, blackFloor float64, blackColor *[3]float64, lift float64) string {
+func solidHex(rgb, gain [3]float64, scale float64, neutralBlack bool, blackFloor float64, blackColor *[3]float64, lift float64, lut *colorLUT) string {
 	if lift <= 0 {
 		lift = solidMinValue
 	}
@@ -425,6 +429,11 @@ func solidHex(rgb, gain [3]float64, scale float64, neutralBlack bool, blackFloor
 		k := lift / v
 		rgb = [3]float64{rgb[0] * k, rgb[1] * k, rgb[2] * k}
 	}
+	// Apply the per-point calibration after the visibility lift, so a point
+	// deliberately set darker is not brightened back to the old floor.
+	if !dark && lut != nil {
+		rgb = lut.mapColor(rgb)
+	}
 	r := math.Min(1, math.Max(0, rgb[0]*gain[0]*scale))
 	g := math.Min(1, math.Max(0, rgb[1]*gain[1]*scale))
 	b := math.Min(1, math.Max(0, rgb[2]*gain[2]*scale))
@@ -444,6 +453,7 @@ func (t *spectrumTap) rawFrame(n int, level uint8) []string {
 	gain, neutralBlack := t.gain, t.neutralBlack
 	blackFloor, ceiling, satBoost := t.blackFloor, t.ceiling, t.satBoost
 	blackColor := t.blackColor
+	lut := t.lut
 	if satBoost < 1 {
 		satBoost = 1
 	}
@@ -489,6 +499,10 @@ func (t *spectrumTap) rawFrame(n int, level uint8) []string {
 				cr = math.Min(1, math.Max(0, l+(cr-l)*satBoost))
 				cg = math.Min(1, math.Max(0, l+(cg-l)*satBoost))
 				cb = math.Min(1, math.Max(0, l+(cb-l)*satBoost))
+			}
+			if !blackArtwork(rgb) && lut != nil {
+				mapped := lut.mapColor([3]float64{cr, cg, cb})
+				cr, cg, cb = mapped[0], mapped[1], mapped[2]
 			}
 			if blackArtwork(rgb) {
 				switch {

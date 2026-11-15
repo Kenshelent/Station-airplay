@@ -31,26 +31,27 @@ type controlsConfig struct {
 	SpectrumSaturation float64          `json:"spectrum_saturation,omitempty"`
 	// Omitted keeps the LED spectrum on; false restores the solid indication
 	// frames without opening a PCM tap or reading cover art.
-	Spectrum           *bool        `json:"spectrum,omitempty"`
-	SpectrumBrightness float64      `json:"spectrum_brightness,omitempty"`
-	SpectrumGainR      float64      `json:"spectrum_gain_r,omitempty"`
-	SpectrumGainG      float64      `json:"spectrum_gain_g,omitempty"`
-	SpectrumGainB      float64      `json:"spectrum_gain_b,omitempty"`
-	LEDColorProfile    string       `json:"led_color_profile,omitempty"`
-	Voice              bool         `json:"voice"`
-	NativeVolume       bool         `json:"native_volume"`
-	VolumeBackend      string       `json:"volume_backend,omitempty"`
-	VolumeDependency   string       `json:"volume_dependency,omitempty"`
-	Ducking            bool         `json:"ducking"`
-	LEDs               bool         `json:"leds"`
-	LEDLevel           uint8        `json:"led_level,omitempty"`
-	NativePlayer       bool         `json:"native_player,omitempty"`
-	AliceButton        bool         `json:"alice_button,omitempty"`
-	ClockWaveStyle     string       `json:"clock_wave_style,omitempty"`
-	ClockMode          string       `json:"clock_mode,omitempty"`
-	ClockWaveSeconds   int          `json:"clock_wave_seconds,omitempty"`
-	ClockTimeSeconds   int          `json:"clock_time_seconds,omitempty"`
-	Group              *groupConfig `json:"group,omitempty"`
+	Spectrum           *bool           `json:"spectrum,omitempty"`
+	SpectrumBrightness float64         `json:"spectrum_brightness,omitempty"`
+	SpectrumGainR      float64         `json:"spectrum_gain_r,omitempty"`
+	SpectrumGainG      float64         `json:"spectrum_gain_g,omitempty"`
+	SpectrumGainB      float64         `json:"spectrum_gain_b,omitempty"`
+	SpectrumPoints     *spectrumPoints `json:"spectrum_points,omitempty"`
+	LEDColorProfile    string          `json:"led_color_profile,omitempty"`
+	Voice              bool            `json:"voice"`
+	NativeVolume       bool            `json:"native_volume"`
+	VolumeBackend      string          `json:"volume_backend,omitempty"`
+	VolumeDependency   string          `json:"volume_dependency,omitempty"`
+	Ducking            bool            `json:"ducking"`
+	LEDs               bool            `json:"leds"`
+	LEDLevel           uint8           `json:"led_level,omitempty"`
+	NativePlayer       bool            `json:"native_player,omitempty"`
+	AliceButton        bool            `json:"alice_button,omitempty"`
+	ClockWaveStyle     string          `json:"clock_wave_style,omitempty"`
+	ClockMode          string          `json:"clock_mode,omitempty"`
+	ClockWaveSeconds   int             `json:"clock_wave_seconds,omitempty"`
+	ClockTimeSeconds   int             `json:"clock_time_seconds,omitempty"`
+	Group              *groupConfig    `json:"group,omitempty"`
 }
 
 func (c *controlsConfig) useSpectrum() bool {
@@ -98,6 +99,9 @@ func loadControls(path string) (*controlsConfig, error) {
 	}
 	if c.SpectrumBlackColor != "" && !previewColor.MatchString(c.SpectrumBlackColor) {
 		return nil, errors.New("spectrum_black_color must be #RRGGBB")
+	}
+	if err := c.SpectrumPoints.validate(); err != nil {
+		return nil, err
 	}
 	if c.SpectrumSaturation < 0 || c.SpectrumSaturation > 2 || c.SpectrumSaturation > 0 && c.SpectrumSaturation < 1 {
 		return nil, errors.New("spectrum_saturation must be 1..2 (0=model default)")

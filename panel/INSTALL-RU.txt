@@ -1,15 +1,16 @@
 AirPlay Panel — тестовый комплект БЕЗ обновления Luna
 
-Версия приёмника: 2.1.8-panel.1
-Версия интерфейса/helper: 0.1.0-test.1
+Версия приёмника: 2.1.8-panel.2
+Версия интерфейса: 0.1.0-test.2
+Версия helper: 0.1.0-test.1
 Требуется официальная Luna 0.2.26+ с включёнными web.ui/web.api и
 allow_plugin_binaries. Никакой патч Luna или PR #38 не требуется.
 
 В комплекте файлы для 12 платформ. Выбирайте ТОЛЬКО свою модель:
 
-1. station-airplay-2.1.8-panel.1-<model>.yampkg — новый приёмник.
+1. station-airplay-2.1.8-panel.2-<model>.yampkg — новый приёмник.
 2. airplay-panel-command-0.1.0-test.1-<model>.yampkg — helper команд.
-3. airplay-panel-0.1.0-test.1.yap — Lua-вкладка (общая для всех).
+3. airplay-panel-0.1.0-test.2.yap — Lua-вкладка (общая для всех).
 
 До установки сохранить настройки и штатно остановить все YAM binary-плагины
 через Luna. Перед каждой транзакцией проверять, что они остановлены:
@@ -18,7 +19,7 @@ postinstall приёмника может снова запустить серв
 
 Установить два .yampkg обычным YAM, например:
 
-yam --platform <model> --profiles /data/yam/platforms install -y /data/local/tmp/station-airplay-2.1.8-panel.1-<model>.yampkg
+yam --platform <model> --profiles /data/yam/platforms install -y /data/local/tmp/station-airplay-2.1.8-panel.2-<model>.yampkg
 yam --platform <model> --profiles /data/yam/platforms install -y /data/local/tmp/airplay-panel-command-0.1.0-test.1-<model>.yampkg
 
 После этого загрузить .yap через установку плагинов В ВЕБ-ИНТЕРФЕЙСЕ LUNA.
@@ -35,6 +36,10 @@ http://<ip>:8099/web/airplay-panel
 
 Есть настройки цветов AirPlay, режим задержки, экспериментальный EQ,
 preview, пресеты и импорт/экспорт JSON.
+В «Цветах основных точек» отдельно настраиваются серый, красный, зелёный,
+синий, жёлтый, голубой, пурпурный, оранжевый и белый; между ними палитра
+обложки интерполируется. Чёрная точка — цвет и яркость свечения чёрной
+обложки. Правка оранжевого больше не сдвигает красный и жёлтый.
 Общей калибровки LED Luna здесь НЕТ. На Алису и штатную музыку EQ не влияет.
 
 Настройки применяются после ручного перезапуска AirPlay — сохранять и

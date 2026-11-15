@@ -11,10 +11,12 @@ import tarfile
 
 root=Path('/mnt/foto/home-lab-dev/build-workspaces')
 src=root/'station-airplay-plugin-panel-20261115'
-out=root/'airplay-plugin-panel-test-20261115'
+out=root/'airplay-plugin-panel-test2-20261115'
 yam=root/'yam-registry-v2-20261101'
 env=dict(os.environ,PATH='/home/rus/.local/go/bin:/tmp/upx-5.2.1:'+os.environ['PATH'])
-version='2.1.8-panel.1'
+version='2.1.8-panel.2'
+helper_version='0.1.0-test.1'
+ui_version='0.1.0-test.2'
 (out/'bin').mkdir(parents=True,exist_ok=True)
 (out/'packages').mkdir(exist_ok=True)
 (out/'reports').mkdir(exist_ok=True)
@@ -66,25 +68,26 @@ for name in ['panel-command']:
         shutil.copyfile(src/'panel/web.toml',plugin/'plugin.toml')
         depends=['yam/luna >=0.2.26','airplay/panel-command >=0.1.0-test.1']
     shutil.copyfile(src/'panel/LUNA-LICENSE',plugin/'LUNA-LICENSE')
-    manifest={'name':'airplay/'+name,'version':'0.1.0-test.1','license':'MIT','description':
+    plugin_version=helper_version if name=='panel-command' else ui_version
+    manifest={'name':'airplay/'+name,'version':plugin_version,'license':'MIT','description':
               'Experimental AirPlay plugin panel. Требует Luna 0.2.26+. No Luna patch required.',
               'homepage':'https://github.com/ryysel/Station-airplay',
               'targets':targets,'depends':depends,
               'files':{'share/luna/plugins/airplay.'+name+'/':'plugin/'}}
     (stage/'yam.yaml').write_text(yaml.safe_dump(manifest,allow_unicode=True,sort_keys=False))
     for target in targets:
-        destination=out/'packages'/f'airplay-{name}-0.1.0-test.1-{target}.yampkg'
+        destination=out/'packages'/f'airplay-{name}-{plugin_version}-{target}.yampkg'
         run([str(yam/'target/release/yam-publish'),'pack','--source',str(stage),'--platform',target,
              '--profiles',str(profiles),'--output',str(destination)],log=f'pack-{name}-{target}.log')
 checks=[]
 invalid=out/'not-for-install-yam-lua'
 invalid.mkdir(exist_ok=True)
-for path in (out/'packages').glob('airplay-panel-0.1.0-test.1-*.yampkg'):
+for path in (out/'packages').glob(f'airplay-panel-{ui_version}-*.yampkg'):
     shutil.move(str(path),str(invalid/path.name))
 for path in sorted((out/'packages').glob('*.yampkg')):
     checks.append(hashlib.sha256(path.read_bytes()).hexdigest()+'  '+path.name)
 (out/'packages/SHA256SUMS').write_text('\n'.join(checks)+'\n')
-ui=out/'packages/airplay-panel-0.1.0-test.1.yap'
+ui=out/'packages'/f'airplay-panel-{ui_version}.yap'
 with ui.open('wb') as stream, gzip.GzipFile(fileobj=stream,mode='wb',filename='',mtime=0) as zipped, tarfile.open(fileobj=zipped,mode='w') as archive:
     for source,name in [('web.toml','plugin.toml'),('main.lua','main.lua'),('index.html','index.html'),('LUNA-LICENSE','LICENSE')]:
         data=(src/'panel'/source).read_bytes()

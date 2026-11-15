@@ -6,10 +6,11 @@ part of this panel.
 
 ## Components
 
-1. `airplay/airplay-luna 2.1.8-panel.1`: receiver and private Unix-socket
-   API, including bounded idempotent requests and device-local presets.
+1. `airplay/airplay-luna 2.1.8-panel.2`: receiver and private Unix-socket
+   API, including bounded idempotent requests, device-local presets and the
+   per-point artwork colour table.
 2. `airplay/panel-command 0.1.0-test.1`: optional one-shot binary helper.
-3. `airplay-panel-0.1.0-test.1.yap`: web-only Lua companion. Install this
+3. `airplay-panel-0.1.0-test.2.yap`: web-only Lua companion. Install this
    through Luna's `.yap` upload, not through YAM v2.
 
 The HTML registers at `/web/airplay-panel` and appears in Luna's custom tabs.
@@ -30,7 +31,7 @@ through Luna before installing either `.yampkg`; never unlink `yam.lock`.
 Use packages for the actual model, not another speaker's archive.
 
 ```sh
-yam --platform <model> --profiles /data/yam/platforms install -y /data/local/tmp/station-airplay-2.1.8-panel.1-<model>.yampkg
+yam --platform <model> --profiles /data/yam/platforms install -y /data/local/tmp/station-airplay-2.1.8-panel.2-<model>.yampkg
 yam --platform <model> --profiles /data/yam/platforms install -y /data/local/tmp/airplay-panel-command-0.1.0-test.1-<model>.yampkg
 ```
 
@@ -39,7 +40,7 @@ before the next YAM transaction if necessary. Local prerelease Luna may fail
 the `>=0.2.26` resolver check; do not override it. This candidate targets
 official Luna 0.2.26.
 
-Upload `airplay-panel-0.1.0-test.1.yap` using Luna's plugin installation UI.
+Upload `airplay-panel-0.1.0-test.2.yap` using Luna's plugin installation UI.
 Enable:
 
 - AirPlay receiver as usual;
@@ -75,7 +76,12 @@ stopped. Settings and EQ are applied on receiver restart, not live.
 
 AirPlay artwork gains, brightness, saturation, black-floor override,
 timing, experimental EQ, per-zone preview, image sampling, named presets
-and JSON import/export. Presets live in AirPlay's state directory.
+and JSON import/export. The nine editable colour points (grey, red, green,
+blue, yellow, cyan, magenta, orange, white) form a 3x3x3 table with
+trilinear interpolation, so one hue can be retuned without moving its
+neighbours. Black keeps the existing per-model black-cover colour and
+floor because those models have their own off/fallback behaviour.
+Presets live in AirPlay's state directory.
 Changes affect AirPlay only, not system music/Alice or other Luna plugins.
 EQ is off by default; keep it off for timing/video checks.
 
