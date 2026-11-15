@@ -115,13 +115,18 @@ if [ -z "$MODEL" ] || [ ! -x "$ROOT/bin/yam" ]; then
   log "update: yam or model unavailable (root=$ROOT model=$MODEL)"
   exit 1
 fi
-log "update: stopping the receiver"
+log "update: stopping the panel and the receiver"
+# Luna takes a shared YAM lease for running plugins, including this Lua panel,
+# so the receiver alone is not enough to free the lock.
+post /api/plugins/airplay.panel/stop
+post /api/plugins/airplay.panel-command/stop
 post /api/plugins/airplay.airplay-luna/stop
 i=0
 while [ "$i" -lt 30 ] && pidof station-airplay >/dev/null 2>&1; do
   i=$((i+1)); sleep 1
 done
-log "update: receiver stopped after ${i}s"
+sleep 1
+log "update: plugins stopped after ${i}s"
 attempt=1
 while :; do
   out=$("$ROOT/bin/yam" --platform "$MODEL" --profiles "$ROOT/platforms" install -y airplay/airplay-luna 2>&1)
