@@ -162,19 +162,6 @@ if [ "$have_pidof" = 1 ]; then
 fi
 sleep 3
 
-# A stock Luna ships allow_plugin_binaries = false. Enable rejects the plugin
-# in that case but still records service_enabled = true, so it has to be
-# fixed before the first enable.
-if [ "$(flag_state)" = true ]; then
-  log "allow_plugin_binaries is on"
-elif api_allow_binaries; then
-  log "allow_plugin_binaries turned on through the API"
-elif file_allow_binaries; then
-  log "allow_plugin_binaries turned on through settings.toml"
-else
-  log "could not turn on allow_plugin_binaries; the plugin cannot start until it is enabled in the Luna settings"
-fi
-
 visible() {
   api_get /api/plugins 2>/dev/null | grep -q "$PLUGIN"
 }
@@ -233,6 +220,29 @@ if ! visible; then
   visible || log "$PLUGIN is still not listed after a rescan"
 fi
 
+# Companions do not depend on the receiver: the panel is a Lua page and the
+# helper is a oneshot binary, so neither needs allow_plugin_binaries. Enable
+# them BEFORE the receiver loop: a station whose receiver cannot start (glibc,
+# busy port, missing library) still gets its page, and a reboot during the
+# receiver retries no longer loses the panel.
+ensure_companion airplay.panel 1 \
+  || log "panel is still disabled; the receiver loop will try again"
+ensure_companion airplay.panel-command 0 || true
+log "companions configured"
+
+# A stock Luna ships allow_plugin_binaries = false. Enable rejects the plugin
+# in that case but still records service_enabled = true, so it has to be
+# fixed before the first enable.
+if [ "$(flag_state)" = true ]; then
+  log "allow_plugin_binaries is on"
+elif api_allow_binaries; then
+  log "allow_plugin_binaries turned on through the API"
+elif file_allow_binaries; then
+  log "allow_plugin_binaries turned on through settings.toml"
+else
+  log "could not turn on allow_plugin_binaries; the plugin cannot start until it is enabled in the Luna settings"
+fi
+
 i=0
 while [ "$i" -lt 20 ]; do
   [ "$i" -gt 0 ] && api_post /api/plugins/rescan >/dev/null 2>&1
@@ -246,11 +256,11 @@ while [ "$i" -lt 20 ]; do
     sleep 3
     if [ "$have_pidof" = 0 ] || running; then
       log "enabled and started $PLUGIN"
-      # Companions share the package but not its enabled flag. The panel must
-      # run; the helper stays enabled-only, so a page request can invoke it.
+      # Idempotent: re-assert both after the receiver came up, in case Luna
+      # rescanned the plugin tree while the receiver was starting.
       ensure_companion airplay.panel 1 || true
       ensure_companion airplay.panel-command 0 || true
-      log "companions configured"
+      log "companions confirmed"
       exit 0
     fi
     j=$((j + 1))
@@ -260,6 +270,10 @@ while [ "$i" -lt 20 ]; do
   sleep 5
 done
 
+# The receiver is not coming up in this run, but the page must not depend on
+# it: try the Lua companions one last time before the worker exits.
+ensure_companion airplay.panel 1 || true
+ensure_companion airplay.panel-command 0 || true
 log "could not start $PLUGIN after about 20 minutes; the package is installed but disabled - check the Luna plugin log"
 EOS
 
