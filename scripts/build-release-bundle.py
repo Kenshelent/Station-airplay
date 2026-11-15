@@ -88,7 +88,7 @@ def main():
     parser.add_argument("--base-packages", type=Path, required=True,
                         help="directory with the verified airplay-luna and panel-command packages")
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--luna-min", default="0.2.27",
+    parser.add_argument("--luna-min", default="0.2.28",
                         help="minimum Luna version that hosts packages with several plugins")
     parser.add_argument("--targets", help="comma-separated subset")
     args = parser.parse_args()

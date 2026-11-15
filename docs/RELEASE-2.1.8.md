@@ -9,7 +9,7 @@
 - `airplay/airplay-luna <version>`: один модельный `.yampkg` на цель;
 - внутри — приёмник `airplay.airplay-luna`, helper `airplay.panel-command`
   (`0.1.0`) и панель `airplay.panel` (`0.1.0`);
-- зависимость `yam/luna >=<минимум>`; по умолчанию `0.2.27`;
+- зависимость `yam/luna >=<минимум>`; по умолчанию `0.2.28`;
 - `conflicts`/`replaces` для старых `airplay/panel` и `airplay/panel-command`.
 
 `postinstall` включает приёмник и панель, а helper оставляет включённым без
@@ -29,7 +29,7 @@ payload: только версии дескрипторов, зависимос�
    - нативную громкость Станции 2 (PR #37) — иначе 2.1.8 не публиковать
      как «громкость Станции 2 исправлена».
 2. Записать точный минимальный номер Luna в `--luna-min` (по умолчанию
-   `0.2.27`). Если релиз получил другой номер — пересобрать с ним.
+   `0.2.28`). Если релиз получил другой номер — пересобрать с ним.
 3. Проверить, что изменения оригинала Mini, которые должны войти в релиз,
    есть в базовом runtime. Если нужен другой супервизор — пересобрать базу
    и заново прогнать QEMU и живую проверку.
@@ -41,7 +41,7 @@ cd release/yampkg  # из корня пакета
 python3 ../../scripts/build-release-bundle.py \
   --base-packages /mnt/foto/home-lab-dev/build-workspaces/airplay-plugin-panel-test2-20261115/packages \
   --out /mnt/foto/home-lab-dev/build-workspaces/airplay-release-2.1.8-20261115/packages \
-  --luna-min 0.2.27
+  --luna-min 0.2.28
 ```
 
 Выход: 12 архивов, `SHA256SUMS` и `release-provenance.json` с хэшами

@@ -21,10 +21,10 @@ matrix = module.load_matrix(MATRIX)
 module.validate_matrix(matrix)
 template = TEMPLATE.read_text()
 module.check(matrix, template)
-assert module.LUNA_DEPENDENCY == "yam/luna >=0.2.27"
+assert module.LUNA_DEPENDENCY == "yam/luna >=0.2.28"
 plugin_toml = (ROOT / "plugin.toml").read_text()
-assert "Требует Luna 0.2.27+." in plugin_toml
-assert module.luna_requirement_text() == "Требует Luna 0.2.27+."
+assert "Требует Luna 0.2.28+." in plugin_toml
+assert module.luna_requirement_text() == "Требует Luna 0.2.28+."
 by_target = {target["target"]: target for target in matrix["targets"]}
 
 assert set(by_target) == {
