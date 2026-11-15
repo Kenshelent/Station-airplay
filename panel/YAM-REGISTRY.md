@@ -47,9 +47,12 @@ Never unlink yam.lock. All three components update together.
 User settings/presets are outside the payload and should be backed up/preserved.
 
 The bundle declares conflicts/replaces for the obsolete separate
-`airplay/panel-command` and `airplay/panel` packages. Let YAM review and transfer
-ownership normally; do not manually remove their links or edit the database.
-Cross-version replacement remains a release-gate integration test.
+`airplay/panel-command` and `airplay/panel` packages. QEMU found the deployed
+older YAM retains a split companion in its database despite those declarations.
+For migration from the PRIVATE split candidate, stop Luna and remove that
+companion with `yam remove airplay/panel-command` BEFORE installing the bundle.
+That YAM's remove command does not accept `-y`. Do not manually remove links or
+edit its database. Fresh installations still need only the single AirPlay package.
 
 The previous private local `.yap` (`airplay-panel`) is not YAM-owned.
 Stop/disable it before enabling the bundled `airplay.panel`; after checking
