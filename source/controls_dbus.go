@@ -300,7 +300,7 @@ func runControlLoop(ctx context.Context, c *sharedController, api *yamAPI, cfg c
 			lastError = time.Now()
 		}
 	}
-	tick := time.NewTicker(500 * time.Millisecond)
+	tick := time.NewTicker(controlsTickInterval(c.device))
 	defer tick.Stop()
 	for {
 		select {
@@ -360,6 +360,13 @@ func controlsVolume(ctx context.Context, api *yamAPI, d yamDevice, cfg controlsC
 		v, err := newLunaControlVolume(api)
 		if err != nil {
 			return nil, err
+		}
+		if originalMini(d) && !volumeManagerListening() {
+			if mixer, err := newALSAControlVolume(v); err == nil {
+				mixed := &miniMixerWriteVolume{reader: v, mixer: mixer}
+				fmt.Printf("station volume: Mini candidate: %s\n", mixed.Backend())
+				return mixed, nil
+			}
 		}
 		// A dead volume-manager port makes Luna's write slow, but Luna still
 		// owns the logical level the station buttons, Alice and the sender

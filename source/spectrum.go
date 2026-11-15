@@ -350,6 +350,15 @@ func blackArtwork(rgb [3]float64) bool {
 	return math.Max(rgb[0], math.Max(rgb[1], rgb[2])) < 0.08
 }
 
+// Mini's full-value solid logo must retain even very dark artwork hues.
+// Keep true black off; the near-black threshold remains unchanged elsewhere.
+func solidBlackArtwork(rgb [3]float64, lift float64) bool {
+	if lift == solidFullValue {
+		return rgb == [3]float64{}
+	}
+	return blackArtwork(rgb)
+}
+
 func (t *spectrumTap) rawSolidFrame(n int, level uint8) []string {
 	if n <= 0 {
 		return nil
@@ -376,7 +385,7 @@ func (t *spectrumTap) rawSolidFrame(n int, level uint8) []string {
 		scale = 1
 	}
 	frame := make([]string, n)
-	if blackArtwork(rgb) {
+	if solidBlackArtwork(rgb, lift) {
 		color := solidHex(rgb, gain, scale, neutralBlack, blackFloor, blackColor, lift, lut)
 		for i := range frame {
 			frame[i] = color
@@ -408,7 +417,7 @@ func solidHex(rgb, gain [3]float64, scale float64, neutralBlack bool, blackFloor
 	// A black cover stays off, keeps the stock dark fallback on Mini 2, or
 	// glows faint violet on Station 2 and Lite 2; only a real artwork colour
 	// is lifted.
-	dark := blackArtwork(rgb)
+	dark := solidBlackArtwork(rgb, lift)
 	switch {
 	case dark && !neutralBlack:
 		rgb = [3]float64{24.0 / 255, 32.0 / 255, 48.0 / 255}
