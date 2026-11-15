@@ -60,27 +60,37 @@ QEMU-прогон для релиза должен ставить пакет п�
 
 ## Публикация
 
-Нужны token и Ed25519 key из профиля реестра; на колонку их не копировать.
+Публикуются уже собранные архивы: `yam-publish publish` подписывает
+`(name, version, target, sha256)` и загружает готовый `.yampkg`, не
+пересобирая payload. Нужны token и Ed25519 key из профиля реестра; на
+колонку их не копировать.
+
+Создайте каталог с `yam.yaml` только для имени и версии (содержимое архива
+инструмент не сверяет):
+
+```yaml
+name: airplay/airplay-luna
+version: 2.1.8
+targets: [yandexstation_2]
+```
+
+Затем для каждой цели:
 
 ```sh
 export YAM_AUTHOR_KEY_FILE=~/Keys/yam-author-private-key.pem
 export YAM_PUBLISH_TOKEN=...   # не печатать в лог и не коммитить
 
-for target in bergamot cucumber mango orion pickle plum yandexmicro \
-              yandexmidi yandexmini_2 yandexmini yandexplum yandexstation_2; do
-  yam-publish release \
-    --source <staged-source> \
-    --platform "$target" \
-    --profiles <yam>/platforms \
-    --output "../packages/station-airplay-2.1.8-$target.yampkg" \
-    --token "$YAM_PUBLISH_TOKEN" \
-    --key "$YAM_AUTHOR_KEY_FILE"
-done
+yam-publish publish \
+  --source <каталог с yam.yaml> \
+  --artifact packages/station-airplay-2.1.8-<target>.yampkg \
+  --target <target> \
+  --token "$YAM_PUBLISH_TOKEN" \
+  --key "$YAM_AUTHOR_KEY_FILE"
 ```
 
-`yam-publish` создаёт архив заново из исходников. Если публиковать готовые
-архивы нельзя, исходное дерево должно давать побайтно тот же payload:
-сверить `sha256sum` с `SHA256SUMS` до отправки.
+`sha256` архива берётся из файла и попадает в подпись; `SHA256SUMS`
+проверьте до отправки. Не используйте `yam-publish release`: он соберёт
+архив заново из источника и это будет другой payload.
 
 ## После публикации
 
