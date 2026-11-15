@@ -44,21 +44,35 @@ func coverPaletteRGB(r io.Reader, size int64, want int) ([3]float64, [][3]float6
 	if !ok {
 		return zero, nil, false
 	}
-	return dominant, paletteCoverRGB(img, want), true
+	palette := paletteCoverRGB(img, want)
+	// A black background usually wins the population vote on dark artwork, but
+	// the visible subject (white line art, a logo, a moon) is not black. Keep
+	// the subject's cluster instead of switching the whole indication off.
+	if math.Max(dominant[0], math.Max(dominant[1], dominant[2])) < .12 {
+		if visible, ok := visibleCoverRGB(img); ok {
+			dominant = visible
+		}
+	}
+	return dominant, palette, true
 }
 
-// paletteCoverRGB keeps the most populated colour clusters of the artwork,
-// dropping near-duplicates and near-black ones. The dominant cluster stays
-// first, so a single-zone caller still gets the average colour.
-func paletteCoverRGB(img image.Image, want int) [][3]float64 {
-	if want <= 0 {
-		return nil
-	}
-	type cell struct {
-		count int
-		sum   [3]float64
-	}
-	var bins [512]cell
+// coverCell is one 8x8x8 colour bucket of the sampled artwork.
+type coverCell struct {
+	count int
+	sum   [3]float64
+}
+
+// coverCluster is a populated bucket, ordered by population.
+type coverCluster struct {
+	count int
+	rgb   [3]float64
+}
+
+// coverClusters samples the artwork into 8x8x8 buckets and returns them by
+// population, the sampled pixels themselves and the sample count.
+func coverClusters(img image.Image) ([]coverCluster, [][3]float64, int) {
+	var bins [512]coverCell
+	var points [][3]float64
 	b := img.Bounds()
 	sx, sy := b.Dx()/64, b.Dy()/64
 	if sx < 1 {
@@ -73,6 +87,7 @@ func paletteCoverRGB(img image.Image, want int) [][3]float64 {
 			if a == 0 {
 				continue
 			}
+			// RGBA is premultiplied. Unpremultiply before quantising.
 			p := [3]float64{float64(r) / float64(a), float64(g) / float64(a), float64(blue) / float64(a)}
 			var q [3]int
 			for k := range p {
@@ -86,13 +101,11 @@ func paletteCoverRGB(img image.Image, want int) [][3]float64 {
 			for k := range p {
 				bins[index].sum[k] += p[k]
 			}
+			points = append(points, p)
 		}
 	}
-	type entry struct {
-		count int
-		rgb   [3]float64
-	}
-	entries := make([]entry, 0, len(bins))
+	entries := make([]coverCluster, 0, len(bins))
+	total := 0
 	for i := range bins {
 		if bins[i].count == 0 {
 			continue
@@ -101,9 +114,40 @@ func paletteCoverRGB(img image.Image, want int) [][3]float64 {
 		for k := range rgb {
 			rgb[k] = bins[i].sum[k] / float64(bins[i].count)
 		}
-		entries = append(entries, entry{count: bins[i].count, rgb: rgb})
+		entries = append(entries, coverCluster{count: bins[i].count, rgb: rgb})
+		total += bins[i].count
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].count > entries[j].count })
+	return entries, points, total
+}
+
+// visibleCoverRGB returns the most populated cluster that is not near-black.
+// Stray pixels are ignored so one bright speck cannot repaint a black cover.
+func visibleCoverRGB(img image.Image) ([3]float64, bool) {
+	entries, _, total := coverClusters(img)
+	if total == 0 {
+		return [3]float64{}, false
+	}
+	for _, e := range entries {
+		if math.Max(e.rgb[0], math.Max(e.rgb[1], e.rgb[2])) < .12 {
+			continue
+		}
+		if e.count*200 < total {
+			continue
+		}
+		return e.rgb, true
+	}
+	return [3]float64{}, false
+}
+
+// paletteCoverRGB keeps the most populated colour clusters of the artwork,
+// dropping near-duplicates and near-black ones. The dominant cluster stays
+// first, so a single-zone caller still gets the average colour.
+func paletteCoverRGB(img image.Image, want int) [][3]float64 {
+	if want <= 0 {
+		return nil
+	}
+	entries, _, _ := coverClusters(img)
 	// Album art is usually a photo on a white or cream background. Painting
 	// that background would leave the whole indication pale, so chromatic
 	// clusters win whenever the artwork has any; neutral ones are only used
@@ -159,56 +203,12 @@ func paletteCoverRGB(img image.Image, want int) [][3]float64 {
 // vote equally, including white and black. Sparse bright logos cannot outweigh
 // a neutral background just because the background has no hue.
 func dominantCoverRGB(img image.Image) ([3]float64, bool) {
-	type cell struct {
-		count int
-		sum   [3]float64
-	}
-	var bins [512]cell
-	var points [][3]float64
-	b := img.Bounds()
-	sx, sy := b.Dx()/64, b.Dy()/64
-	if sx < 1 {
-		sx = 1
-	}
-	if sy < 1 {
-		sy = 1
-	}
-	for y := b.Min.Y; y < b.Max.Y; y += sy {
-		for x := b.Min.X; x < b.Max.X; x += sx {
-			r, g, blue, a := img.At(x, y).RGBA()
-			if a == 0 {
-				continue
-			}
-			// RGBA is premultiplied. Unpremultiply before quantising.
-			p := [3]float64{float64(r) / float64(a), float64(g) / float64(a), float64(blue) / float64(a)}
-			var q [3]int
-			for k := range p {
-				q[k] = int(p[k] * 8)
-				if q[k] > 7 {
-					q[k] = 7
-				}
-			}
-			index := q[0]*64 + q[1]*8 + q[2]
-			bins[index].count++
-			for k := range p {
-				bins[index].sum[k] += p[k]
-			}
-			points = append(points, p)
-		}
-	}
-	winner := 0
-	for i := range bins {
-		if bins[i].count > bins[winner].count {
-			winner = i
-		}
-	}
-	if bins[winner].count == 0 {
+	entries, points, _ := coverClusters(img)
+	if len(entries) == 0 {
 		return [3]float64{}, false
 	}
-	var center, result [3]float64
-	for k := range center {
-		center[k] = bins[winner].sum[k] / float64(bins[winner].count)
-	}
+	center := entries[0].rgb
+	var result [3]float64
 	n := 0
 	for _, p := range points {
 		d := 0.0

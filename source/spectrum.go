@@ -424,7 +424,7 @@ func solidHex(rgb, gain [3]float64, scale float64, neutralBlack bool, blackFloor
 	case dark && blackFloor > 0:
 		// A solid frame has no PCM lift; twice the animated floor keeps the
 		// black-cover glow visible and matches the spectrum frame.
-		rgb = [3]float64{0.55, 0.30, 0.85}
+		rgb = [3]float64{0.5, 0.5, 0.5}
 		if blackColor != nil {
 			rgb = *blackColor
 		}
@@ -519,9 +519,9 @@ func (t *spectrumTap) rawFrame(n int, level uint8) []string {
 					cr, cg, cb = 24.0/255, 32.0/255, 48.0/255
 				case blackFloor > 0:
 					// Station 2 has a big panel: a black cover keeps a very
-					// dim violet glow instead of a dead ring, and the beat
+					// dim neutral glow instead of a dead ring, and the beat
 					// lifts it.
-					cr, cg, cb = 0.55, 0.30, 0.85
+					cr, cg, cb = 0.5, 0.5, 0.5
 					if blackColor != nil {
 						cr, cg, cb = blackColor[0], blackColor[1], blackColor[2]
 					}

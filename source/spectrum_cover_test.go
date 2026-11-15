@@ -362,3 +362,80 @@ func TestBlackCoverHasNoBrightnessFloor(t *testing.T) {
 		}
 	}
 }
+
+// Dark artwork with a visible subject must not switch the indication off. The
+// reported cover is almost black with thin white line art: the dominant
+// cluster is the background, but the subject is what the LED has to show.
+func TestDarkCoverKeepsVisibleSubject(t *testing.T) {
+	dir := t.TempDir()
+	img := image.NewRGBA(image.Rect(0, 0, 64, 64))
+	for y := 0; y < 64; y++ {
+		for x := 0; x < 64; x++ {
+			img.Set(x, y, color.RGBA{4, 4, 4, 255})
+		}
+	}
+	for y := 0; y < 64; y++ {
+		for x := 28; x < 36; x++ {
+			img.Set(x, y, color.RGBA{235, 235, 235, 255})
+		}
+	}
+	path := filepath.Join(dir, "cover-dark-lines.png")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, img); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	cover, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cover.Close()
+	info, err := cover.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dominant, _, ok := coverPaletteRGB(cover, info.Size(), 6)
+	if !ok {
+		t.Fatal("dark cover was not decoded")
+	}
+	if math.Max(dominant[0], math.Max(dominant[1], dominant[2])) < .5 {
+		t.Fatalf("dominant colour %v ignored the white subject", dominant)
+	}
+	tap := newSpectrumTap(dir)
+	tap.adoptCover(path, "cover-dark-lines.png", time.Now())
+	tap.gain = [3]float64{1, 1, 1}
+	tap.mu.Lock()
+	tap.solidFloor = solidFullValue
+	tap.mu.Unlock()
+	for _, s := range tap.solidFrame(6, 200) {
+		r, g, b := parseHex(t, s)
+		if r == 0 && g == 0 && b == 0 {
+			t.Fatalf("dark cover with white line art stayed off: %v", tap.solidFrame(6, 200))
+		}
+		if r != g || g != b {
+			t.Fatalf("neutral line art produced a tint: %s", s)
+		}
+	}
+}
+
+// A cover that really is uniform black still turns the indication off.
+func TestUniformBlackCoverStaysOff(t *testing.T) {
+	dir := t.TempDir()
+	path := writeCover(t, dir, "cover-uniform-black.png", color.RGBA{0, 0, 0, 255})
+	tap := newSpectrumTap(dir)
+	tap.gain = [3]float64{1, 1, 1}
+	tap.adoptCover(path, "cover-uniform-black.png", time.Now())
+	tap.mu.Lock()
+	tap.solidFloor = solidFullValue
+	tap.neutralBlack = true
+	tap.mu.Unlock()
+	for _, s := range tap.solidFrame(6, 200) {
+		if s != "#000000" {
+			t.Fatalf("uniform black cover emits %s", s)
+		}
+	}
+}

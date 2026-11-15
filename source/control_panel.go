@@ -151,7 +151,7 @@ func panelDefaults(d yamDevice) controlsConfig {
 	}
 	points := defaultSpectrumPoints()
 	return controlsConfig{TimingMode: timingFastAudio, Spectrum: &on, SpectrumGainR: gain[0], SpectrumGainG: gain[1], SpectrumGainB: gain[2],
-		SpectrumBrightness: brightness, SpectrumSaturation: saturation, SpectrumBlackFloor: &floor, SpectrumBlackColor: "#8C4CD9", LEDLevel: 200, LEDColorProfile: profile,
+		SpectrumBrightness: brightness, SpectrumSaturation: saturation, SpectrumBlackFloor: &floor, SpectrumBlackColor: "#808080", LEDLevel: 200, LEDColorProfile: profile,
 		SpectrumPoints: &points}
 }
 

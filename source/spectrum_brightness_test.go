@@ -67,6 +67,12 @@ func TestSpectrumComfortPerModel(t *testing.T) {
 			t.Fatalf("%s comfort: %v/%v/%v", model, floor, ceiling, saturation)
 		}
 	}
+	for _, model := range []string{"yandexmini", "YandexStationMini"} {
+		floor, ceiling, saturation := spectrumComfort(yamDevice{Model: model})
+		if floor != 0.07 || ceiling != 1 || saturation != 1 {
+			t.Fatalf("%s comfort: %v/%v/%v", model, floor, ceiling, saturation)
+		}
+	}
 	for _, model := range []string{"yandexmini_2", "yandexmidi"} {
 		floor, ceiling, saturation := spectrumComfort(yamDevice{Model: model})
 		if floor != 0 || ceiling != 1 || saturation != 1 {
@@ -75,7 +81,7 @@ func TestSpectrumComfortPerModel(t *testing.T) {
 	}
 }
 
-func TestSpectrumLite2BlackGlow(t *testing.T) {
+func TestSpectrumNeutralBlackGlow(t *testing.T) {
 	tap := newSpectrumTap(t.TempDir())
 	tap.haveCoverColor = true
 	tap.coverColor = [3]float64{}
@@ -83,14 +89,14 @@ func TestSpectrumLite2BlackGlow(t *testing.T) {
 	tap.blackFloor = 0.07
 	got := tap.solidFrame(3, 200)[0]
 	r, g, b := parseHex(t, got)
-	if got == "#000000" || !(b > r && r > g) {
-		t.Fatalf("Lite 2 solid black glow is not violet: %s", got)
+	if got == "#000000" || r != g || g != b {
+		t.Fatalf("solid black glow is not neutral: %s", got)
 	}
 	tap.state.history = [4]float64{}
 	got = tap.frame(1, 200)[0]
 	r, g, b = parseHex(t, got)
-	if got == "#000000" || !(b > r && r > g) {
-		t.Fatalf("Lite 2 animated black glow is not violet: %s", got)
+	if got == "#000000" || r != g || g != b {
+		t.Fatalf("animated black glow is not neutral: %s", got)
 	}
 
 	// Covers saved as #0A0A0A used to escape the exact-zero check and get the
@@ -99,8 +105,8 @@ func TestSpectrumLite2BlackGlow(t *testing.T) {
 		tap.coverColor = near
 		got = tap.solidFrame(3, 200)[0]
 		r, g, b = parseHex(t, got)
-		if got == "#000000" || !(b >= r && b > g) {
-			t.Fatalf("near-black solid frame is not violet: %s", got)
+		if got == "#000000" || r != g || g != b {
+			t.Fatalf("near-black solid frame is not neutral: %s", got)
 		}
 		if r+g+b > 90 {
 			t.Fatalf("near-black solid frame is washed out: %s", got)
@@ -108,8 +114,8 @@ func TestSpectrumLite2BlackGlow(t *testing.T) {
 		tap.state.history = [4]float64{.3, .2, .1, .1}
 		got = tap.frame(1, 200)[0]
 		r, g, b = parseHex(t, got)
-		if !(b >= r && b > g) || r+g+b > 90 {
-			t.Fatalf("near-black animated frame is not dim violet: %s", got)
+		if r != g || g != b || r+g+b > 90 {
+			t.Fatalf("near-black animated frame is not dim neutral: %s", got)
 		}
 		tap.state.history = [4]float64{}
 	}
@@ -127,8 +133,8 @@ func TestSpectrumStation2BlackGlowAndCeiling(t *testing.T) {
 	if got == "#000000" || r+g+b == 0 {
 		t.Fatal("black cover stayed dark on Station 2")
 	}
-	if !(b > r) {
-		t.Fatalf("black glow is not cool: %s", got)
+	if r != g || g != b {
+		t.Fatalf("black glow is not neutral: %s", got)
 	}
 
 	tap.coverColor = [3]float64{1, 1, 1}

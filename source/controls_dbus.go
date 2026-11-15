@@ -566,7 +566,11 @@ func spectrumComfort(d yamDevice) (floor, ceiling, saturation float64) {
 		floor, saturation = 0.07, 1.35
 	case "plum", "yandexplum":
 		// Lite 2 shows black artwork as true black by default; the owner wants
-		// the same faint violet as Station 2 instead of a dead ring.
+		// the same faint glow as Station 2 instead of a dead ring.
+		floor = 0.07
+	case "yandexmini", "YandexStationMini":
+		// The six-zone logo used to go dark on black artwork. Keep a faint
+		// neutral glow so the cover is still indicated.
 		floor = 0.07
 	}
 	return floor, ceiling, saturation

@@ -17,6 +17,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) == 2 && startPackageUpdate(os.Args[1]) {
+		return
+	}
 	if len(os.Args) != 2 || len(os.Args[1]) > panelrpc.MaxWire {
 		os.Exit(2)
 	}
