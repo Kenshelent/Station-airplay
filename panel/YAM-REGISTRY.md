@@ -1,73 +1,73 @@
-# One-package registry delivery — private candidate
+# Один пакет из реестра YAM v2
 
-The delivery unit is **one** model-specific `airplay/airplay-luna.yampkg`.
-One registry entry, one AirPlay package/version, one transaction for all components:
+`airplay/airplay-luna` — модельный `.yampkg`, который ставит сразу три
+компонента AirPlay:
+
+- `airplay.airplay-luna` — приёмник и его runtime;
+- `airplay.panel-command` — короткий helper для команд страницы;
+- `airplay.panel` — веб-панель `/web/airplay.panel`.
+
+Отдельных пакетов панели и helper нет. Старые имена
+`airplay/panel` и `airplay/panel-command` объявлены в `conflicts` и
+`replaces`: YAM передаёт их файлы новому владельцу штатной транзакцией,
+без ручного удаления ссылок и правки базы.
+
+## Требование к хосту
+
+Нужна **Luna 0.2.27+** (`yam/luna >=0.2.27`): в ней пакет может владеть
+несколькими плагинами, каждый компонент разрешается к владельцу своего
+payload, а Lua-страница отдаётся из пакета вместе с общей транзакционной
+арендой. На Luna 0.2.26 такой пакет не считается поддерживаемым.
+
+Luna остаётся обычной зависимостью: YAM её не устанавливает автоматически.
+Если её нет, выполните `yam install yam/luna`.
+
+## Установка
 
 ```sh
+yam registry add official https://repo.yse.wtf/v2 \
+  --key ed25519:5Rz8F47uftWVU5kLgWYhprkEZ4rpP2kecUge/a7KQas=
 yam install airplay/airplay-luna
 ```
 
-This is the proposed production command, not permission to publish this candidate.
-Luna remains a normal host dependency, not an embedded copy of the host.
-There are no dependencies on separate AirPlay companion packages.
+После установки в Luna включены приёмник и панель; helper включён, но не
+стартует сам — его запускает только запрос страницы. Приёмник и панель
+поднимаются после перезагрузки без ручной активации.
 
-## Contents owned by the same package
+Страница: `http://<ip>:8099/web/airplay.panel`.
+`/calibration` — отдельная возможность хоста Luna, к этому пакету не относится.
 
-- `share/luna/plugins/airplay.airplay-luna/`: receiver service;
-- `share/luna/plugins/airplay.panel-command/`: bounded one-shot RPC helper;
-- `share/luna/plugins/airplay.panel/`: web-only Lua service and HTML.
+## Обновление и удаление
 
-The processes stay isolated, but they are NOT separate packages.
-The receiver is never invoked to carry browser commands.
-All files are hashed, updated and removed by YAM. No `.yap` upload, postinstall
-copy into Luna's local directories, or new network port.
-Page: `/web/airplay.panel`; `/calibration` is not part of this generic host fix.
+Останавливайте сервисы штатно в интерфейсе Luna. Не удаляйте
+`/tmp/yam/yam.lock`, не подменяйте файлы вручную и не редактируйте базу YAM.
 
-## Host requirement
+```sh
+yam remove airplay/airplay-luna
+```
 
-Official Luna 0.2.26 assumes plugin ID == package name for binary launch and
-does not pin YAM Lua pages. A separate generic patch (based on v0.2.26, not PR #38)
-resolves all components to the package that owns their selected payload.
-It verifies namespace, exact payload layout, current version, descriptor and
-entry containment. Lua holds the same transaction lease as binary plugins.
-The installed bundle must depend on a Luna release that includes this patch.
-Candidate `2.1.8-panel.3` explicitly pins unpublished test host
-`yam/luna =0.2.27-yamweb.1`; that host is NOT currently a public registry release.
+Удаляется весь пакет: приёмник, helper и панель. Пользовательские настройки
+(`airplay-controls.json`), пресеты и цветовые правки Luna лежат вне payload
+и сохраняются; перед крупным обновлением их всё равно стоит скопировать.
 
-## Lifecycle and migration
+## Миграция со старых сборок
 
-In Luna the receiver and panel are services; helper is enabled, not autostart.
-The existing receiver hook remains in the package; it starts the receiver only.
-This candidate does not yet add automatic approval/activation of companions.
-Existing administrator binary-execution permission still applies.
+- опубликованный 2.1.7 ставится и обновляется обычным `yam install`;
+- приватные раздельные `airplay/panel-command` и `airplay/panel` старый YAM
+  не всегда удаляет по `conflicts`; перед установкой остановите Luna и
+  выполните `yam remove airplay/panel-command` (и `airplay/panel`, если он
+  есть). Команда удаления в том YAM не принимает `-y`;
+- локальный `.yap` `airplay-panel` не принадлежит YAM: отключите его в Luna
+  и удалите вручную после проверки новой страницы.
 
-Stop ALL YAM-hosted services normally before install/update/remove.
-Never unlink yam.lock. All three components update together.
-`yam remove airplay/airplay-luna` removes all three payloads together.
-User settings/presets are outside the payload and should be backed up/preserved.
+## Что проверено
 
-The bundle declares conflicts/replaces for the obsolete separate
-`airplay/panel-command` and `airplay/panel` packages. QEMU found the deployed
-older YAM retains a split companion in its database despite those declarations.
-For migration from the PRIVATE split candidate, stop Luna and remove that
-companion with `yam remove airplay/panel-command` BEFORE installing the bundle.
-That YAM's remove command does not accept `-y`. Do not manually remove links or
-edit its database. Fresh installations still need only the single AirPlay package.
+- Чистая установка, обновление с 2.1.7, повреждённый архив, удаление и
+  повторная установка в QEMU kuyase;
+- три плагина одного пакета, запуск приёмника и панели после перезагрузки,
+  helper без автозапуска, страница и её API;
+- сохранение `airplay-controls.json`, пресетов и настроек Luna;
+- отсутствие второго сетевого порта и второго приёмника.
 
-The previous private local `.yap` (`airplay-panel`) is not YAM-owned.
-Stop/disable it before enabling the bundled `airplay.panel`; after checking
-the new UI, remove the old local plugin through Luna. Do not silently delete it.
-
-## Build and release gate
-
-`scripts/build-bundle-candidate.py` builds one archive for each of 12 models,
-verifies input/output payload hashes, descriptor count, execute bits and
-that the only dependency is the compatible host. No publisher is invoked.
-
-Tests in the generic Luna patch cover bundle ownership for binary/Lua components,
-version pinning, namespace/entry/descriptor escapes, transaction exclusion,
-actual page serving, stop/update/cleanup and existing binary authorization.
-
-Pending: host model builds and signed private-registry fresh install,
-split-package migration, upgrade/remove/rollback end-to-end on QEMU, then an
-approved hardware trial. Do not describe this as production-ready yet.
+Физические проверки звука, обложек, громкости и конкретных моделей остаются
+на владельце колонки: см. `docs/validation/` и `docs/CHECK_ON_YOUR_SPEAKER.md`.

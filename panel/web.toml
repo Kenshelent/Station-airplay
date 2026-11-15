@@ -1,6 +1,6 @@
-id = "airplay-panel"
+id = "airplay.panel"
 name = "AirPlay Panel"
-version = "0.1.0-test.2"
+version = "0.1.0"
 entry = "main.lua"
 permissions = ["web"]
 [launch]

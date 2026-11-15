@@ -61,15 +61,15 @@ def rpc(operation,method='GET',body=None,identifier=None,epoch=None):
     raise RuntimeError('RPC timeout')
 
 api('/api/plugins/rescan','POST',{})
-for identifier in ['airplay-panel','airplay.panel-command']:
+for identifier in ['airplay.panel','airplay.panel-command']:
     plugin=next(p for p in api('/api/plugins') if p['manifest']['id']==identifier)
     if not plugin['enabled']:api('/api/plugins/'+identifier+'/toggle','POST',{})
-api('/api/plugins/airplay-panel/service/enable','POST',{})
+api('/api/plugins/airplay.panel/service/enable','POST',{})
 for _ in range(40):
-    if any(p['id']=='airplay-panel' for p in api('/api/custom-web')):break
+    if any(p['id']=='airplay.panel' for p in api('/api/custom-web')):break
     time.sleep(.2)
 else:raise RuntimeError('no web registration')
-page=api('/web/airplay-panel',raw=True)
+page=api('/web/airplay.panel',raw=True)
 assert 'airplay.panel-command/invoke' in page and 'requestID()' in page
 assert '<option value="luna">' not in page
 print('LUA_YAP_PAGE_OK',flush=True)

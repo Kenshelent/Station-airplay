@@ -19,7 +19,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status);self.send_header('Content-Type','application/json')
         self.end_headers();self.wfile.write(body)
     def do_GET(self):
-        if self.path=='/web/airplay-panel':
+        if self.path=='/web/airplay.panel':
             self.send_response(200);self.send_header('Content-Type','text/html; charset=utf-8');self.end_headers();self.wfile.write(page)
         elif self.path=='/api/device':self.respond(200,{'model':'yandexmini','room':'Browser fixture'})
         elif self.path.endswith('/logs'):

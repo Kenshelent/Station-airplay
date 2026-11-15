@@ -179,6 +179,54 @@ visible() {
   api_get /api/plugins 2>/dev/null | grep -q "$PLUGIN"
 }
 
+# The package owns three plugins, but Luna stores "enabled" per plugin ID and
+# nothing enables companions automatically. Parse one object at a time: the
+# response is a compact JSON array of {"manifest":...,"enabled":...} objects.
+plugin_object() {
+  api_get /api/plugins 2>/dev/null \
+    | sed 's/},{"manifest"/}\n{"manifest"/g' \
+    | grep -F "\"id\":\"$1\"" | head -n 1
+}
+
+plugin_enabled() {
+  plugin_object "$1" | grep -q '"enabled":true'
+}
+
+# want_service=1: enable and start (a service plugin). Otherwise only insert
+# the ID into enabled.json; a oneshot helper must not be supervised.
+ensure_companion() {
+  id=$1
+  want_service=$2
+  i=0
+  while [ "$i" -lt 20 ]; do
+    [ "$i" -gt 0 ] && api_post /api/plugins/rescan >/dev/null 2>&1
+    if plugin_enabled "$id"; then
+      if [ "$want_service" = 1 ]; then
+        api_post "/api/plugins/$id/service/enable" >/dev/null 2>&1
+      fi
+      log "companion $id is enabled"
+      return 0
+    fi
+    if [ "$want_service" = 1 ]; then
+      api_post "/api/plugins/$id/service/enable" >/dev/null 2>&1
+    else
+      api_post "/api/plugins/$id/toggle" >/dev/null 2>&1
+    fi
+    sleep 2
+    if plugin_enabled "$id"; then
+      if [ "$want_service" = 1 ]; then
+        api_post "/api/plugins/$id/service/enable" >/dev/null 2>&1
+      fi
+      log "companion $id is enabled"
+      return 0
+    fi
+    i=$((i + 1))
+    sleep 3
+  done
+  log "could not enable companion $id"
+  return 1
+}
+
 if ! visible; then
   api_post /api/plugins/rescan >/dev/null 2>&1
   sleep 2
@@ -198,6 +246,11 @@ while [ "$i" -lt 20 ]; do
     sleep 3
     if [ "$have_pidof" = 0 ] || running; then
       log "enabled and started $PLUGIN"
+      # Companions share the package but not its enabled flag. The panel must
+      # run; the helper stays enabled-only, so a page request can invoke it.
+      ensure_companion airplay.panel 1 || true
+      ensure_companion airplay.panel-command 0 || true
+      log "companions configured"
       exit 0
     fi
     j=$((j + 1))

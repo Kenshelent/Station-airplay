@@ -47,11 +47,11 @@
    yam install airplay/airplay-luna
    ```
 
-   Пакет требует `yam/luna >=0.2.25`, но YAM не устанавливает рекомендации автоматически: в плане установки есть только сам пакет. Если Luna ещё не установлена, выполните `yam install yam/luna`.
+   Пакет требует `yam/luna >=0.2.27`: эта Luna поддерживает пакеты с несколькими плагинами и отдаёт страницу из payload. YAM не устанавливает зависимости автоматически: в плане установки есть только сам пакет. Если Luna не установлена или старше, выполните `yam install yam/luna`. Один пакет ставит приёмник, helper и панель; отдельные пакеты панели больше не нужны.
 
    Фоновый установщик также включает настройку Luna `allow_plugin_binaries`. На BusyBox он может изменить `settings.toml` и перезапустить Luna с её прежними аргументами, чтобы разрешение вступило в силу. Ход действий виден в `/tmp/airplay-postinstall.log`.
 
-3. Откройте интерфейс Luna. Найдите `airplay.airplay-luna` и дождитесь состояния `running`.
+3. Откройте интерфейс Luna. Найдите `airplay.airplay-luna` и `airplay.panel`, дождитесь состояния `running`; helper `airplay.panel-command` должен быть включён, но не запущен. Страница панели — `http://<ip>:8099/web/airplay.panel`.
 
    После распаковки `postinstall` запускает фоновое включение. Сообщение `scheduled ... start in a detached worker` означает, что установка завершилась, а включение продолжается. Процесс повторяет включение около 20 минут, пока Luna становится доступной и плагин запускается. Затем пакет останется установленным; включите его в Luna после запуска хоста.
 
@@ -82,6 +82,8 @@ YAM проверит платформу и распакует пакет. Вкл
 | Путь | Что хранится |
 |---|---|
 | `/data/yam/share/luna/plugins/airplay.airplay-luna/` | Runtime: launcher, приёмник, библиотеки и манифест Luna |
+| `/data/yam/share/luna/plugins/airplay.panel/` | Lua-панель и её страница; отдельного пакета нет |
+| `/data/yam/share/luna/plugins/airplay.panel-command/` | Helper команд панели; запускается только запросом страницы |
 | `$LUNA_PLUGIN_STATE/airplay-controls.json` | Настройки пользователя; launcher сохраняет их между запусками |
 | `/data/yam/var/luna/data/plugins/plugin-state/airplay.airplay-luna/` | Обычный каталог состояния; здесь также ищите `runtime.log` |
 | `/tmp/airplay-postinstall.log` | Ход фонового включения после установки |
