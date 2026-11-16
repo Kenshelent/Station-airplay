@@ -110,7 +110,9 @@ assert by_target["cucumber"]["config"]["spectrum"] is True
 assert by_target["mango"]["config"]["spectrum"] is True
 assert by_target["yandexmicro"]["config"] == {
     "voice": True,
-    "native_volume": True,
+    # The firmware does not apply the station level to the AirPlay dmix path,
+    # so the receiver scales the sender's slider itself.
+    "native_volume": False,
     "ducking": True,
     "leds": True,
     "led_level": 200,
