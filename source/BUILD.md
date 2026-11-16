@@ -99,7 +99,7 @@ python3 tests/test_package.py
 
 `scripts/package_yampkg.py` пересобирает модельные `.yampkg` из опубликованного базового релиза: заменяет супервизор, launcher и начальный JSON, добавляет AArch64-приёмник и `libplist` для `pickle`, обновляет target, версию, `depends` и хеши манифеста. Матрица целей и канонический launcher лежат в [`release/yampkg`](../release/yampkg/README.md). `go build` и `scripts/package.py` по-прежнему создают только legacy `.yap`; для установки готового пакета v2 используйте [Releases](https://github.com/ryysel/Station-airplay/releases) или реестр по [инструкции](../docs/INSTALLATION.md).
 
-С 2.1.8 публикуется один пакет на три плагина. Его собирает `scripts/build-release-bundle.py` из пакетов приёмника (`package_yampkg.py`) и helper (`yam-publish pack`): `--base-packages <каталог> --out <каталог> --luna-min 0.2.28`. Сборщик переписывает версии дескрипторов и манифест, встраивает панель и `postinstall`, затем читает каждый архив обратно и сверяет хэши.
+С 2.1.8 публикуется один пакет на три плагина. Его собирает `scripts/build-release-bundle.py` из пакетов приёмника (`package_yampkg.py`) и helper (`yam-publish pack`): `--base-packages <каталог> --out <каталог> --luna-min 0.2.29`. Сборщик переписывает версии дескрипторов и манифест, встраивает панель и `postinstall`, затем читает каждый архив обратно и сверяет хэши.
 
 ## Полная сборка базового runtime
 

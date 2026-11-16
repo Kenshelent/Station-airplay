@@ -8,6 +8,11 @@
   `ignore_volume_control` не ставится и ползунок отправителя масштабирует
   shairport. Кнопки станции и Алиса во время AirPlay-сессии поток не меняют.
   Подробности и ограничения — в [отчёте](docs/validation/LITE_20261116.md).
+- Требуется `yam/luna >=0.2.29`: перезапуск демона после установки
+  сохраняет его аргументы ([PR #41](https://github.com/nyakokitsu/luna/pull/41)),
+  а нативная громкость Лайта выбирается по device-tree
+  ([PR #43](https://github.com/nyakokitsu/luna/pull/43)). Если Luna старше,
+  сначала `yam install yam/luna`.
 - Существующие конфигурации Лайта получают этот флаг миграцией
   `native_volume true → false` (версия умолчаний 4), если владелец не менял
   поле. Голос, ducking, индикация и native player не затрагиваются.
