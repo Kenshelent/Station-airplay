@@ -73,3 +73,13 @@ func TestReportedSkipAndCommonVariants(t *testing.T) {
 		}
 	}
 }
+
+func TestVersionMatchesManifest(t *testing.T) {
+	var manifest struct{ Version string }
+	if _, err := toml.Decode(string(readPackageManifest(t)), &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(version, manifest.Version) {
+		t.Fatalf("binary version %q does not match plugin.toml %q", version, manifest.Version)
+	}
+}

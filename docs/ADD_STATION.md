@@ -97,7 +97,11 @@ Avahi должен добавлять сервисы к уже существу�
 | `packagedDBus` | Наличие штатных daemon/send на прошивке |
 | `airplayModel` | Согласованное представление в AirPlay: `AudioAccessory5,1` для компактных, `AudioAccessory1,1` для полноразмерных моделей |
 
-Готовые профили: [SHARED_MODELS.md](SHARED_MODELS.md). Используйте существующий receiver для нужной ABI. Измените allowlist соответствующего манифеста/пакета, тесты пакета и документацию; версия в `plugin.toml` и `source/service.go` должна совпадать, если изменение требует выпуска новой версии.
+Готовые профили: [SHARED_MODELS.md](SHARED_MODELS.md). Используйте существующий receiver для нужной ABI.
+
+Матрица целей лежит в [`release/yampkg/targets.json`](../release/yampkg/targets.json): на цель там заданы model ID, начальный JSON, `controls_config`, `sleep`, экспорт D-Bus и флаги индикации. Новая модель добавляется и в `profiles` (`source/service.go`), и в матрицу, иначе `package_yampkg.py` не выпустит для неё пакет. Тесты пакета: `tests/test_package.py`, `tests/test_package_yampkg.py`.
+
+Версия в `plugin.toml` и в `version` (`source/service.go`) должна совпадать; это проверяет `TestVersionMatchesManifest`, иначе `station-airplay --version` врёт о сборке.
 
 Тестовые образцы: `TestSharedProfilesKeepProvenAudioContract`, `TestLight2SharesMixerAndHoldsDisplay`, `TestStockMDNSHostname` и `tests/test_package.py`. Для прямого PCM проверяйте отсутствие неожиданного `hw:0,0` или `spk_tee`.
 
@@ -105,7 +109,11 @@ Avahi должен добавлять сервисы к уже существу�
 
 Следуйте [BUILD.md](../source/BUILD.md). Выполните Go-тесты/vet на Linux, проверки миграции и пакета. Кросс-компиляция тестового бинарника на macOS не означает выполнение тестов.
 
-Установите результат средствами нужной версии YAM. Сначала остановите прежний экземпляр и дождитесь исчезновения его дочерних процессов, затем устанавливайте и включайте новый. Команды legacy-YAM и Luna v2 различаются: [INSTALLATION.md](INSTALLATION.md).
+Для отладки на колонке достаточно **пакета приёмника**: `scripts/package_yampkg.py` соберёт `.yampkg` для новой цели из опубликованного базового релиза. Этого хватает, чтобы проверить звук, mDNS, громкость и остановку процессов.
+
+Релиз с 2.1.8 — **один пакет на три плагина** (приёмник, панель, helper). Он собирается отдельно: `scripts/build-release-bundle.py --base-packages <каталог с пакетами приёмника и helper> --out <каталог> --luna-min 0.2.28`. Такой пакет требует `yam/luna >= 0.2.28`; на более старой Luna YAM откажет в установке. Helper-пакет для цели собирается `yam-publish pack` из `panel/command.toml` и бинарника `panel-command`.
+
+Установка: остановите прежний экземпляр и дождитесь исчезновения дочерних процессов. Важно: пока запущен **любой** плагин из YAM-пакета, включая Lua-панель, Luna держит общий flock на `/tmp/yam/yam.lock`, и `yam install` падает с `another yam transaction is running`. Остановите приёмник и панель (`POST /api/plugins/<id>/stop`) перед установкой. С 2.1.11 это делает кнопка «Обновить AirPlay» в панели. Команды legacy-YAM и Luna v2 различаются: [INSTALLATION.md](INSTALLATION.md).
 
 ## 7. Принять результат на колонке
 
