@@ -18,7 +18,7 @@ import (
 // controlsDefaultsVersion is bumped whenever a release changes the seeded
 // defaults in a way existing installs should pick up. Missing in the file
 // means version 1 (2.1.4 and older).
-const controlsDefaultsVersion = 3
+const controlsDefaultsVersion = 4
 
 type defaultsRule struct {
 	version  int
@@ -42,6 +42,11 @@ var controlsDefaultsRules = []defaultsRule{
 	{3, "yandexmini", "leds", false, true},
 	{3, "yandexmini", "native_player", false, true},
 	{3, "yandexmini", "spectrum", true, false},
+	// 2.1.12: the Station Lite firmware does not apply the Quasar or ALSA level
+	// to the dmix path AirPlay uses, so forwarding the sender slider to the
+	// station had no audible effect. shairport scales the stream itself now;
+	// the station keeps its own volume for Alice and the buttons.
+	{4, "yandexmicro", "native_volume", true, false},
 }
 
 // migrateControls stamps the file with the current defaults version and

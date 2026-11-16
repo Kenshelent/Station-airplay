@@ -119,6 +119,41 @@ func TestMigrateControlsMiniGetsFullControls(t *testing.T) {
 	}
 }
 
+func TestMigrateControlsLiteScalesInTheReceiver(t *testing.T) {
+	// 2.1.11 and older forwarded the sender slider to the station, where this
+	// firmware never applied it to the AirPlay dmix path. The new default lets
+	// shairport scale the stream, so only an untouched `true` is replaced.
+	path, cfg := writeControlsFile(t, `{
+  "voice": true,
+  "native_volume": true,
+  "ducking": true,
+  "leds": true,
+  "native_player": false,
+  "alice_button": false,
+  "spectrum": true,
+  "defaults_version": 3
+}`)
+	out, err := migrateControls(path, "yandexmicro", cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.NativeVolume {
+		t.Fatal("Lite kept forwarding the sender slider to the station")
+	}
+	if !out.Voice || !out.Ducking || !out.LEDs || out.NativePlayer || out.AliceButton {
+		t.Fatalf("unrelated flags changed: %+v", out)
+	}
+	// Another model with the same file keeps its native volume.
+	otherPath, other := writeControlsFile(t, `{"native_volume": true, "defaults_version": 3}`)
+	otherOut, err := migrateControls(otherPath, "yandexmini_2", other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !otherOut.NativeVolume {
+		t.Fatal("a Lite rule touched Mini 2")
+	}
+}
+
 func TestMigrateControlsIsIdempotent(t *testing.T) {
 	path, cfg := writeControlsFile(t, `{"leds": false, "spectrum": false}`)
 	if _, err := migrateControls(path, "yandexstation_2", cfg); err != nil {

@@ -165,7 +165,7 @@
       "mango_guard": false,
       "config": {
         "voice": true,
-        "native_volume": true,
+        "native_volume": false,
         "ducking": true,
         "leds": true,
         "led_level": 200,

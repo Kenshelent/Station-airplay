@@ -127,6 +127,32 @@ func TestLight2SharesMixerAndHoldsDisplay(t *testing.T) {
 	}
 }
 
+func TestLiteScalesTheSenderVolumeInTheReceiver(t *testing.T) {
+	// The Station Lite firmware acknowledges native VolumeSet and mirrors it to
+	// ALSA Master, but neither level reaches the dmix path AirPlay plays on:
+	// a direct plug:dmix_spk measurement at Master 100% and 5% was identical.
+	// The packaged defaults therefore leave native_volume off, which is what
+	// drops ignore_volume_control and lets shairport apply the AirPlay slider.
+	// Only the receiver-side path was audible on firmware 0.369.1.46.
+	p, ok := profileFor("yandexmicro")
+	if !ok || p.pcm != "plug:dmix_spk" || !p.quasarCoexist {
+		t.Fatalf("Lite profile: %+v", p)
+	}
+	conf := receiverControlConfig(p, &controlsConfig{Voice: true, Ducking: true, LEDs: true})
+	if strings.Contains(conf, "ignore_volume_control") {
+		t.Fatalf("Lite forces the receiver to 0 dB, so the slider is inaudible:\n%s", conf)
+	}
+	if !strings.Contains(conf, "volume_range_db = 50;") {
+		t.Fatalf("Lite lost the receiver-side volume range:\n%s", conf)
+	}
+	// Guard the mechanism: a profile that does own the station volume still
+	// asks the receiver for a flat stream.
+	native := receiverControlConfig(p, &controlsConfig{Voice: true, NativeVolume: true})
+	if !strings.Contains(native, `ignore_volume_control = "yes"`) {
+		t.Fatal("native volume no longer pins the receiver to 0 dB")
+	}
+}
+
 func TestChildrenCannotInheritYAMTokenOrPlumLibraries(t *testing.T) {
 	env := audioEnv([]string{"PATH=/bin", "YAM_API_TOKEN=private", "YAM_API_URL=http://localhost", "LD_LIBRARY_PATH=/plum/lib", "HOME=/plum", "DBUS_SYSTEM_BUS_ADDRESS=unix:path=/system"}, "/run/station-airplay", "/private/bus")
 	joined := strings.Join(env, "\n")
