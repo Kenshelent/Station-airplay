@@ -161,10 +161,13 @@ def main():
         manifest["depends"] = ["yam/luna >=" + args.luna_min]
         manifest["conflicts"] = sorted(set(manifest.get("conflicts", []) + SPLIT))
         manifest["replaces"] = sorted(set(manifest.get("replaces", []) + SPLIT))
-        manifest["description"] = (
-            "AirPlay 2 для Яндекс Станций: приёмник, панель управления и helper команд "
-            f"в одном пакете. Требует Luna {args.luna_min}+."
-        )
+        description = re.search(r'^description = "([^"]*)"$', text, re.M)
+        if not description:
+            raise SystemExit(f"{target}: receiver plugin.toml has no description")
+        # The registry catalogue takes its summary from this field, so keep the
+        # receiver's own description (already carrying the Luna requirement)
+        # instead of a second sentence that goes stale on every release.
+        manifest["description"] = description.group(1)
         artifact = out / f"station-airplay-{version}-{target}.yampkg"
         pack(artifact, manifest, payload)
 
