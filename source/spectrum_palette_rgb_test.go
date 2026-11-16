@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"image"
 	"image/color"
+	"image/png"
 	"math"
 	"os"
 	"path/filepath"
@@ -100,5 +102,30 @@ func TestRealCoverRGBFixtures(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A white cover must reach the LEDs as #FF6666, not as all three channels at
+// full: on these rings that reads as washed-out white.
+func TestWhiteCoverBecomesWarmWhite(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 64, 64))
+	for y := 0; y < 64; y++ {
+		for x := 0; x < 64; x++ {
+			img.Set(x, y, color.RGBA{255, 255, 255, 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	dominant, _, ok := coverPaletteRGB(bytes.NewReader(buf.Bytes()), int64(buf.Len()), 6)
+	if !ok {
+		t.Fatal("white cover was not decoded")
+	}
+	if dominant[0] < .95 {
+		t.Fatalf("white lost its value: %v", dominant)
+	}
+	if math.Abs(dominant[1]/dominant[0]-.40) > .02 || math.Abs(dominant[2]/dominant[0]-.40) > .02 {
+		t.Fatalf("white is not the warm white: %v", dominant)
 	}
 }
