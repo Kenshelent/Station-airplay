@@ -37,21 +37,29 @@ type controlsConfig struct {
 	SpectrumGainG      float64         `json:"spectrum_gain_g,omitempty"`
 	SpectrumGainB      float64         `json:"spectrum_gain_b,omitempty"`
 	SpectrumPoints     *spectrumPoints `json:"spectrum_points,omitempty"`
-	LEDColorProfile    string          `json:"led_color_profile,omitempty"`
-	Voice              bool            `json:"voice"`
-	NativeVolume       bool            `json:"native_volume"`
-	VolumeBackend      string          `json:"volume_backend,omitempty"`
-	VolumeDependency   string          `json:"volume_dependency,omitempty"`
-	Ducking            bool            `json:"ducking"`
-	LEDs               bool            `json:"leds"`
-	LEDLevel           uint8           `json:"led_level,omitempty"`
-	NativePlayer       bool            `json:"native_player,omitempty"`
-	AliceButton        bool            `json:"alice_button,omitempty"`
-	ClockWaveStyle     string          `json:"clock_wave_style,omitempty"`
-	ClockMode          string          `json:"clock_mode,omitempty"`
-	ClockWaveSeconds   int             `json:"clock_wave_seconds,omitempty"`
-	ClockTimeSeconds   int             `json:"clock_time_seconds,omitempty"`
-	Group              *groupConfig    `json:"group,omitempty"`
+	// SpectrumMode selects the LED visualisation. Empty or "palette" is the
+	// cover-following spectrum; "eq" paints the three audio bands as an
+	// equalizer across the ring (bass, middle, treble).
+	SpectrumMode        string       `json:"spectrum_mode,omitempty"`
+	SpectrumEQBass      string       `json:"spectrum_eq_bass,omitempty"`
+	SpectrumEQMid       string       `json:"spectrum_eq_mid,omitempty"`
+	SpectrumEQHigh      string       `json:"spectrum_eq_high,omitempty"`
+	SpectrumEQIntensity float64      `json:"spectrum_eq_intensity,omitempty"`
+	LEDColorProfile     string       `json:"led_color_profile,omitempty"`
+	Voice               bool         `json:"voice"`
+	NativeVolume        bool         `json:"native_volume"`
+	VolumeBackend       string       `json:"volume_backend,omitempty"`
+	VolumeDependency    string       `json:"volume_dependency,omitempty"`
+	Ducking             bool         `json:"ducking"`
+	LEDs                bool         `json:"leds"`
+	LEDLevel            uint8        `json:"led_level,omitempty"`
+	NativePlayer        bool         `json:"native_player,omitempty"`
+	AliceButton         bool         `json:"alice_button,omitempty"`
+	ClockWaveStyle      string       `json:"clock_wave_style,omitempty"`
+	ClockMode           string       `json:"clock_mode,omitempty"`
+	ClockWaveSeconds    int          `json:"clock_wave_seconds,omitempty"`
+	ClockTimeSeconds    int          `json:"clock_time_seconds,omitempty"`
+	Group               *groupConfig `json:"group,omitempty"`
 }
 
 func (c *controlsConfig) useSpectrum() bool {
@@ -191,10 +199,15 @@ func validDB(v float64) bool {
 // AirPlay sender's slider arrives as attenuation in dB. Mapping dB linearly to
 // percent made the middle of the sender slider much quieter than the same
 // position on the station. This curve lifts the middle while keeping both
-// endpoints, and 10% quantization matches the station's own step.
+// endpoints.
+//
+// The quantisation step is 5%, the station's own native grid. It used to be
+// 10%: a 16-position AirPlay slider then put two neighbouring positions into
+// one step, so moving the sender by one notch did nothing (reported on Mini as
+// "no change between the 3rd and 4th level").
 const (
 	volumeCurveExponent = 0.8
-	volumeStepPercent   = 10
+	volumeStepPercent   = 5
 )
 
 func quantizeVolumePercent(percent int) int {

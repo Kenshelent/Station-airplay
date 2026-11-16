@@ -416,8 +416,10 @@ func TestDarkCoverKeepsVisibleSubject(t *testing.T) {
 		if r == 0 && g == 0 && b == 0 {
 			t.Fatalf("dark cover with white line art stayed off: %v", tap.solidFrame(6, 200))
 		}
-		if r != g || g != b {
-			t.Fatalf("neutral line art produced a tint: %s", s)
+		// White artwork is painted as #FF6666: all three channels at full
+		// read as washed-out white on these LEDs.
+		if g != b || r <= g {
+			t.Fatalf("white line art is not the warm white: %s", s)
 		}
 	}
 }

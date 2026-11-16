@@ -96,10 +96,10 @@ func TestSpectrumFrameFollowsBandsAndCoverHue(t *testing.T) {
 }
 
 func TestAppliedSpectrumTuning(t *testing.T) {
-	// These are the owner's 2026-11-11 panel values; pin them so a later
-	// refactor cannot silently move the deployed ring.
-	if coverSaturationBoost != 0.22 {
-		t.Fatalf("saturation boost %.2f, want 0.22", coverSaturationBoost)
+	// Owner values: 0.22 from 2026-11-11, raised to 0.30 in 2.1.13 after
+	// feedback that violet and yellow looked washed out next to white.
+	if coverSaturationBoost != 0.30 {
+		t.Fatalf("saturation boost %.2f, want 0.30", coverSaturationBoost)
 	}
 	if spectrumFloor != 0.065 {
 		t.Fatalf("bar floor %.3f, want 0.065", spectrumFloor)

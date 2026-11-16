@@ -52,8 +52,52 @@ func coverPaletteRGB(r io.Reader, size int64, want int) ([3]float64, [][3]float6
 		if visible, ok := visibleCoverRGB(img); ok {
 			dominant = visible
 		}
+	} else if _, sat, _ := rgbHSV(dominant[0], dominant[1], dominant[2]); sat < coverNeutralCutoff {
+		// A white or cream background can be the biggest cluster on a colourful
+		// cover. Painting it leaves the whole ring pale, so a real colour wins
+		// whenever the artwork has one. Neutral artwork keeps its neutral tone.
+		if chromatic, ok := chromaticCoverRGB(img); ok {
+			dominant = chromatic
+		}
 	}
+	dominant = warmWhiteIfNeutral(dominant)
 	return dominant, palette, true
+}
+
+// chromaticCoverRGB returns the most populated visibly coloured cluster.
+// Clusters below half a percent are noise: one bright pixel must not repaint
+// the ring. Colours are pushed away from grey the same way the palette is.
+func chromaticCoverRGB(img image.Image) ([3]float64, bool) {
+	entries, _, total := coverClusters(img)
+	if total == 0 {
+		return [3]float64{}, false
+	}
+	for _, e := range entries {
+		v := math.Max(e.rgb[0], math.Max(e.rgb[1], e.rgb[2]))
+		if v < .15 || e.count*200 < total {
+			continue
+		}
+		if _, sat, _ := rgbHSV(e.rgb[0], e.rgb[1], e.rgb[2]); sat >= .25 {
+			return boostCoverSaturation(e.rgb), true
+		}
+	}
+	return [3]float64{}, false
+}
+
+// warmWhite turns "white" artwork into the colour the LEDs actually render as
+// white. A neutral #FFFFFF drives all three channels, and on these rings the
+// green and blue LEDs wash the result out; #FF6666 stays white but dimmer.
+func warmWhiteIfNeutral(rgb [3]float64) [3]float64 {
+	v := math.Max(rgb[0], math.Max(rgb[1], rgb[2]))
+	// Grey artwork keeps its grey: only a bright neutral reads as "white" on
+	// the ring, and only that one gets the LED-friendly warm white.
+	if v < .75 {
+		return rgb
+	}
+	if _, sat, _ := rgbHSV(rgb[0], rgb[1], rgb[2]); sat >= .10 {
+		return rgb
+	}
+	return [3]float64{v, v * .40, v * .40}
 }
 
 // coverCell is one 8x8x8 colour bucket of the sampled artwork.
@@ -183,7 +227,7 @@ func paletteCoverRGB(img image.Image, want int) [][3]float64 {
 			}
 			chromatic = append(chromatic, rgb)
 		} else if !seen(neutral, rgb) {
-			neutral = append(neutral, rgb)
+			neutral = append(neutral, warmWhiteIfNeutral(rgb))
 		}
 		if len(chromatic) >= want && len(neutral) >= want {
 			break

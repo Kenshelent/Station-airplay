@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -42,9 +43,10 @@ const (
 	// at 45%, so its cover is painted at full value instead.
 	solidFullValue = 1
 
-	// Owner-tuned on 2026-11-11: +22% saturation and a slightly higher bar
-	// floor. Greys and cream still stay neutral.
-	coverSaturationBoost = 0.22
+	// Owner-tuned on 2026-11-11 (+22%) and raised in 2.1.13 after feedback that
+	// violet and yellow looked washed out next to white: +30% saturation. Greys
+	// and cream still stay neutral.
+	coverSaturationBoost = 0.30
 	coverNeutralCutoff   = 0.15
 	spectrumFloor        = 0.065
 )
@@ -57,6 +59,14 @@ type spectrumTap struct {
 	// lut maps nominal artwork colours to the colours the LEDs should show.
 	// It is nil while every point is identity, keeping the old fast path.
 	lut *colorLUT
+	// eqMode paints the three audio bands (bass, middle, treble) as an
+	// equalizer instead of following the artwork palette.
+	eqMode      bool
+	eqColors    [3][3]float64
+	eqIntensity float64
+	// ledLevel is the panel's LED brightness. It is read on every animation
+	// tick so the slider applies without restarting the plugin.
+	ledLevel atomic.Uint32
 	// matrix is the device's stock LED calibration loaded by name. swapRB
 	// pre-swaps red and blue for hosts whose Luna profile packs BGR.
 	matrix *ledColorMatrix
@@ -463,6 +473,7 @@ func (t *spectrumTap) rawFrame(n int, level uint8) []string {
 	blackFloor, ceiling, satBoost := t.blackFloor, t.ceiling, t.satBoost
 	blackColor := t.blackColor
 	lut := t.lut
+	eqMode, eqColors, eqIntensity := t.eqMode, t.eqColors, t.eqIntensity
 	if satBoost < 1 {
 		satBoost = 1
 	}
@@ -494,6 +505,35 @@ func (t *spectrumTap) rawFrame(n int, level uint8) []string {
 		value = math.Min(1, value)
 		if ceiling > 0 && ceiling < 1 && value > ceiling {
 			value = ceiling
+		}
+
+		if eqMode {
+			// Three zones across the ring: bass, middle, treble. Each zone has
+			// its own colour and its brightness follows that band only, so the
+			// ring reads like a level meter instead of a tinted cover.
+			zone := i * 3 / n
+			if zone > 2 {
+				zone = 2
+			}
+			heard := history[0]
+			if zone == 1 {
+				heard = math.Max(history[1], history[2])
+			} else if zone == 2 {
+				heard = history[3]
+			}
+			level := (spectrumFloor + math.Pow(heard, 1.3)*.9) * scale * eqIntensity
+			if level < 0 {
+				level = 0
+			}
+			if level > 1 {
+				level = 1
+			}
+			c := eqColors[zone]
+			r := math.Min(1, math.Max(0, c[0]*gain[0]*level))
+			g := math.Min(1, math.Max(0, c[1]*gain[1]*level))
+			b := math.Min(1, math.Max(0, c[2]*gain[2]*level))
+			frame[i] = fmt.Sprintf("#%02X%02X%02X", int(r*255), int(g*255), int(b*255))
+			continue
 		}
 
 		switch {

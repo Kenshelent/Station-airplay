@@ -43,6 +43,31 @@ func TestVolumeStepAndLoudnessCurve(t *testing.T) {
 	}
 }
 
+// An AirPlay sender exposes about sixteen slider positions over -30..0 dB.
+// Each one must land on its own station step; with the old 10% grid two
+// neighbouring positions collapsed and moving the slider by one notch did
+// nothing on Mini.
+func TestEverySenderPositionReachesItsOwnStep(t *testing.T) {
+	seen := map[int]float64{}
+	for i := 1; i <= 15; i++ {
+		db := -30 + 2*float64(i)
+		got := dbPercent(db)
+		if previous, ok := seen[got]; ok {
+			t.Fatalf("%.0f dB and %.0f dB both map to %d%%", previous, db, got)
+		}
+		seen[got] = db
+	}
+	if len(seen) != 15 {
+		t.Fatalf("only %d distinct steps out of 15", len(seen))
+	}
+	if got := dbPercent(-30); got != 0 {
+		t.Fatalf("bottom = %d", got)
+	}
+	if got := dbPercent(0); got != 100 {
+		t.Fatalf("top = %d", got)
+	}
+}
+
 func TestNativeVolumeObservationKeepsFivePercentSteps(t *testing.T) {
 	for _, tc := range []struct {
 		in   float64

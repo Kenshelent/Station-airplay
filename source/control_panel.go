@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"time"
 
@@ -66,11 +67,33 @@ func startControlPanel(ctx context.Context, c *sharedController, path, socket st
 			fail(w, err)
 			return
 		}
+		before, err := loadControls(path)
+		if err != nil {
+			fail(w, err)
+			return
+		}
 		if err = savePanelSettings(path, data); err != nil {
 			fail(w, err)
 			return
 		}
-		respond(w, 200, map[string]any{"saved": true, "restart_required": true})
+		next, err := loadControls(path)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		if next != nil {
+			if err = c.applyPanelSettings(*next); err != nil {
+				fail(w, err)
+				return
+			}
+		}
+		// Colours, brightness, points, the black point and the equalizer layout
+		// are read every frame. The audio equalizer and the timing mode change
+		// the receiver command line, so those still need a restart.
+		restart := before == nil || next == nil ||
+			before.TimingMode != next.TimingMode ||
+			!reflect.DeepEqual(before.Equalizer, next.Equalizer)
+		respond(w, 200, map[string]any{"saved": true, "restart_required": restart})
 	})
 	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
@@ -80,7 +103,7 @@ func startControlPanel(ctx context.Context, c *sharedController, path, socket st
 		respond(w, 200, map[string]any{"preview": c.preview.status(time.Now()), "led_count": c.ledCount,
 			"model": c.device.Model, "defaults": panelDefaults(c.device),
 			"zones":           []map[string]any{{"id": "artwork", "count": c.ledCount, "supported": c.cfg.LEDs && c.ledCount > 0}},
-			"equalizer_scope": "AirPlay only", "settings_apply": "restart", "timing_modes": []string{timingSynchronized, timingFastAudio}})
+			"equalizer_scope": "AirPlay only", "settings_apply": "live", "timing_modes": []string{timingSynchronized, timingFastAudio}})
 	})
 	mux.HandleFunc("/preview", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" && r.Method != "DELETE" {

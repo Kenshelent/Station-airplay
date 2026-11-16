@@ -20,7 +20,7 @@ func spectrumLEDLevel(cfg controlsConfig) uint8 {
 	return level
 }
 
-func runSpectrumLEDs(ctx context.Context, c *sharedController, tap *spectrumTap, level uint8) {
+func runSpectrumLEDs(ctx context.Context, c *sharedController, tap *spectrumTap, _ uint8) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	var lastErr time.Time
@@ -31,6 +31,11 @@ func runSpectrumLEDs(ctx context.Context, c *sharedController, tap *spectrumTap,
 		case <-ticker.C:
 			if c.preview.active(time.Now()) {
 				continue
+			}
+			// Read the brightness every tick: the panel changes it live.
+			level := uint8(tap.ledLevel.Load())
+			if level == 0 {
+				level = 200
 			}
 			if !c.ledPlay.Load() && !c.ledSolid.Load() {
 				continue

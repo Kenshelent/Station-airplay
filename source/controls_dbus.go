@@ -203,9 +203,6 @@ func serveControlsUI(ctx context.Context, bus string, api *yamAPI, d yamDevice, 
 		}
 		go runSpectrumLEDs(ctx, c, spectrum, spectrumLEDLevel(cfg))
 	}
-	if d.Model == "plum" || d.Model == "yandexplum" {
-		c.volumeStep = 5
-	}
 	if cfg.NativePlayer {
 		if _, err := lunaServerRoot(api.base); err == nil {
 			native := newLunaNativePlayer(api)
@@ -492,6 +489,18 @@ func waitNativeVolume(ctx context.Context, v volumeControl) error {
 	}
 }
 
+// applyPanelSettings pushes the saved settings that can change while audio is
+// playing. Spectrum colours, brightness, points, the black point and the
+// equalizer layout are read by the renderer every frame. The audio equalizer
+// and the timing mode are baked into the receiver command line at start, so
+// they still need a restart.
+func (c *sharedController) applyPanelSettings(cfg controlsConfig) error {
+	if c.spectrum == nil {
+		return nil
+	}
+	return configureSpectrum(c.device, cfg, c.spectrum)
+}
+
 // configureSpectrum applies the target's stock LED calibration and tuning.
 // The colour matrix is only accepted for the Mini 2, where it was verified;
 // all other models keep Luna's logical RGB profile untouched.
@@ -517,8 +526,30 @@ func configureSpectrum(d yamDevice, cfg controlsConfig, tap *spectrumTap) error 
 		color := [3]float64{float64(rgb>>16&255) / 255, float64(rgb>>8&255) / 255, float64(rgb&255) / 255}
 		blackColor = &color
 	}
+	eqColors := [3][3]float64{{1, .10, 0}, {1, .50, 0}, {1, .75, .10}}
+	for i, value := range []string{cfg.SpectrumEQBass, cfg.SpectrumEQMid, cfg.SpectrumEQHigh} {
+		if value == "" {
+			continue
+		}
+		var rgb uint32
+		if _, err := fmt.Sscanf(value, "#%06x", &rgb); err != nil {
+			return err
+		}
+		eqColors[i] = [3]float64{float64(rgb>>16&255) / 255, float64(rgb>>8&255) / 255, float64(rgb&255) / 255}
+	}
+	eqIntensity := cfg.SpectrumEQIntensity
+	if eqIntensity < .3 {
+		eqIntensity = .3
+	}
+	if eqIntensity > 2 {
+		eqIntensity = 2
+	}
 	configureSolidFloor(d, tap)
 	tap.mu.Lock()
+	tap.eqMode = cfg.SpectrumMode == "eq"
+	tap.eqColors = eqColors
+	tap.eqIntensity = eqIntensity
+	tap.ledLevel.Store(uint32(spectrumLEDLevel(cfg)))
 	tap.brightness = cfg.SpectrumBrightness
 	tap.gain = gain
 	tap.lut = lut
