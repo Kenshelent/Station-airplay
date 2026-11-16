@@ -1,16 +1,16 @@
 package main
 
 import (
+	"math"
 	"testing"
 )
 
-// The equalizer mode paints the ring as three bands: bass, middle, treble.
-// Each zone must take its own colour and its own level, with no cover tint.
-func TestEQModePaintsThreeBandColours(t *testing.T) {
+// The equalizer keeps one colour for the whole ring and changes only the
+// brightness of three band zones, like a level meter.
+func TestEQModeVariesOnlyBrightness(t *testing.T) {
 	tap := newSpectrumTap(t.TempDir())
 	tap.mu.Lock()
 	tap.eqMode = true
-	tap.eqColors = [3][3]float64{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
 	tap.eqIntensity = 1
 	tap.gain = [3]float64{1, 1, 1}
 	tap.state.history = [4]float64{1, 1, 1, 1}
@@ -20,48 +20,83 @@ func TestEQModePaintsThreeBandColours(t *testing.T) {
 	if len(frame) != 3 {
 		t.Fatalf("frame has %d zones", len(frame))
 	}
-	for i, want := range [3]string{"red", "green", "blue"} {
-		r, g, b := parseHex(t, frame[i])
-		switch want {
-		case "red":
-			if !(r > g && r > b) {
-				t.Fatalf("bass zone %q is not red", frame[i])
+	var ratio [2]float64
+	for i, s := range frame {
+		r, g, b := parseHex(t, s)
+		if r == 0 {
+			t.Fatalf("zone %d is dark: %q", i, s)
+		}
+		if i == 0 {
+			ratio = [2]float64{float64(g) / float64(r), float64(b) / float64(r)}
+			continue
+		}
+		if math.Abs(float64(g)/float64(r)-ratio[0]) > .03 || math.Abs(float64(b)/float64(r)-ratio[1]) > .03 {
+			t.Fatalf("zone %d changed colour: %q vs %q", i, s, frame[0])
+		}
+	}
+}
+
+// Each band lights its own zone; the other zones keep only the dim floor.
+func TestEQModeFollowsEachBand(t *testing.T) {
+	for band := 0; band < 3; band++ {
+		tap := newSpectrumTap(t.TempDir())
+		tap.mu.Lock()
+		tap.eqMode = true
+		tap.eqIntensity = 1
+		tap.gain = [3]float64{1, 1, 1}
+		var history [4]float64
+		switch band {
+		case 0:
+			history[0] = 1
+		case 1:
+			history[1], history[2] = 1, 1
+		case 2:
+			history[3] = 1
+		}
+		tap.state.history = history
+		tap.mu.Unlock()
+
+		frame := tap.rawFrame(6, 200)
+		lit := -1
+		for i := range frame {
+			zone := i * 3 / len(frame)
+			if zone > 2 {
+				zone = 2
 			}
-		case "green":
-			if !(g > r && g > b) {
-				t.Fatalf("middle zone %q is not green", frame[i])
+			if zone == band {
+				if _, g, _ := parseHex(t, frame[i]); g > lit {
+					lit = g
+				}
 			}
-		case "blue":
-			if !(b > r && b > g) {
-				t.Fatalf("treble zone %q is not blue", frame[i])
+		}
+		if lit < 80 {
+			t.Fatalf("band %d zone is dark", band)
+		}
+		for i := range frame {
+			zone := i * 3 / len(frame)
+			if zone > 2 {
+				zone = 2
+			}
+			if zone == band {
+				continue
+			}
+			if _, g, _ := parseHex(t, frame[i]); g >= lit/2 {
+				t.Fatalf("band %d lit a foreign zone at LED %d: %q", band, i, frame[i])
 			}
 		}
 	}
 }
 
-// A silent band must stay dark while its neighbours are lit.
-func TestEQModeFollowsEachBand(t *testing.T) {
-	tap := newSpectrumTap(t.TempDir())
-	tap.mu.Lock()
-	tap.eqMode = true
-	tap.eqColors = [3][3]float64{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
-	tap.eqIntensity = 1
-	tap.gain = [3]float64{1, 1, 1}
-	tap.state.history = [4]float64{0, 1, 0, 0}
-	tap.mu.Unlock()
-
-	frame := tap.rawFrame(3, 200)
-	// A silent band keeps only the dim visibility floor, far below a live one.
-	bassR, _, _ := parseHex(t, frame[0])
-	_, midG, _ := parseHex(t, frame[1])
-	trebleR, _, trebleB := parseHex(t, frame[2])
-	if midG < 100 {
-		t.Fatalf("middle band is dark: %q", frame[1])
+// Choosing the equalizer must animate even if the old "Спектр PCM" checkbox is
+// off: the equalizer is drawn by the spectrum renderer.
+func TestEqualizerModeImpliesSpectrum(t *testing.T) {
+	off := false
+	cfg := controlsConfig{LEDs: true, Spectrum: &off, SpectrumMode: "eq"}
+	if !cfg.useSpectrum() {
+		t.Fatal("eq mode did not enable the spectrum renderer")
 	}
-	if bassR >= midG/2 {
-		t.Fatalf("silent bass is as bright as the middle band: %q", frame[0])
-	}
-	if trebleR+trebleB >= midG/2 {
-		t.Fatalf("silent treble is as bright as the middle band: %q", frame[2])
+	cfg.SpectrumMode = "palette"
+	if cfg.useSpectrum() {
+		t.Fatal("palette mode ignored the disabled spectrum checkbox")
 	}
 }

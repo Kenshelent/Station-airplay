@@ -15,11 +15,11 @@ func TestVolumeStepAndLoudnessCurve(t *testing.T) {
 	if got := dbPercent(0); got != 100 {
 		t.Fatalf("top = %d", got)
 	}
-	if got := dbPercent(-10); got != 70 {
-		t.Fatalf("-10 dB = %d, want 70", got)
+	if got := dbPercent(-10); got != 72 {
+		t.Fatalf("-10 dB = %d, want 72", got)
 	}
-	if got := dbPercent(-20); got != 40 {
-		t.Fatalf("-20 dB = %d, want 40", got)
+	if got := dbPercent(-20); got != 42 {
+		t.Fatalf("-20 dB = %d, want 42", got)
 	}
 	previous := -1
 	for db := -30.0; db <= 0; db += 0.5 {
@@ -27,7 +27,7 @@ func TestVolumeStepAndLoudnessCurve(t *testing.T) {
 		if got < previous {
 			t.Fatalf("not monotonic at %.1f: %d after %d", db, got, previous)
 		}
-		if got%volumeStepPercent != 0 {
+		if got != 100 && got%volumeStepPercent != 0 {
 			t.Fatalf("%.1f dB = %d, not a %d%% step", db, got, volumeStepPercent)
 		}
 		previous = got

@@ -115,6 +115,16 @@ if [ -z "$MODEL" ] || [ ! -x "$ROOT/bin/yam" ]; then
   log "update: yam or model unavailable (root=$ROOT model=$MODEL)"
   exit 1
 fi
+# Pressing "update" on the latest version used to stop the panel and then fail
+# with "already installed", leaving the panel stopped and hidden in Luna. Ask
+# the registry what it would install and skip the whole stop/install dance when
+# that is exactly what is already here.
+installed=$("$ROOT/bin/yam" --platform "$MODEL" --profiles "$ROOT/platforms" list 2>/dev/null | awk '$1=="airplay/airplay-luna" {print $2; exit}')
+planned=$("$ROOT/bin/yam" --platform "$MODEL" --profiles "$ROOT/platforms" plan airplay/airplay-luna 2>/dev/null | awk '$1=="airplay/airplay-luna" {print $2; exit}')
+if [ -n "$installed" ] && [ "$installed" = "$planned" ]; then
+  log "update: already latest ($installed); nothing to do"
+  exit 0
+fi
 log "update: stopping the panel and the receiver"
 # Luna takes a shared YAM lease for running plugins, including this Lua panel,
 # so the receiver alone is not enough to free the lock.
@@ -143,6 +153,11 @@ while :; do
   break
 done
 log "update: yam result $rc"
+# Restore everything the script stopped, whatever the install said: a failed or
+# no-op install must not leave the panel stopped and missing from Luna.
 post /api/plugins/airplay.airplay-luna/service/enable
-log "update: enable requested"
+post /api/plugins/airplay.panel/service/enable
+post /api/plugins/airplay.panel/service/start
+post /api/plugins/airplay.airplay-luna/service/start
+log "update: restore requested"
 `

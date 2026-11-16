@@ -526,17 +526,8 @@ func configureSpectrum(d yamDevice, cfg controlsConfig, tap *spectrumTap) error 
 		color := [3]float64{float64(rgb>>16&255) / 255, float64(rgb>>8&255) / 255, float64(rgb&255) / 255}
 		blackColor = &color
 	}
-	eqColors := [3][3]float64{{1, .10, 0}, {1, .50, 0}, {1, .75, .10}}
-	for i, value := range []string{cfg.SpectrumEQBass, cfg.SpectrumEQMid, cfg.SpectrumEQHigh} {
-		if value == "" {
-			continue
-		}
-		var rgb uint32
-		if _, err := fmt.Sscanf(value, "#%06x", &rgb); err != nil {
-			return err
-		}
-		eqColors[i] = [3]float64{float64(rgb>>16&255) / 255, float64(rgb>>8&255) / 255, float64(rgb&255) / 255}
-	}
+	// The per-band colours from 2.1.13 are accepted for compatibility but no
+	// longer used: the equalizer changes brightness, not colour.
 	eqIntensity := cfg.SpectrumEQIntensity
 	if eqIntensity < .3 {
 		eqIntensity = .3
@@ -547,7 +538,6 @@ func configureSpectrum(d yamDevice, cfg controlsConfig, tap *spectrumTap) error 
 	configureSolidFloor(d, tap)
 	tap.mu.Lock()
 	tap.eqMode = cfg.SpectrumMode == "eq"
-	tap.eqColors = eqColors
 	tap.eqIntensity = eqIntensity
 	tap.ledLevel.Store(uint32(spectrumLEDLevel(cfg)))
 	tap.brightness = cfg.SpectrumBrightness

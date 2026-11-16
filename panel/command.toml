@@ -1,6 +1,6 @@
 id = "airplay.panel-command"
 name = "AirPlay Panel Command"
-version = "0.1.2"
+version = "0.1.3"
 entry = "panel-command"
 permissions = ["exec"]
 [launch]

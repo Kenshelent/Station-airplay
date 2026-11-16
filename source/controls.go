@@ -63,7 +63,12 @@ type controlsConfig struct {
 }
 
 func (c *controlsConfig) useSpectrum() bool {
-	return c != nil && c.LEDs && (c.Spectrum == nil || *c.Spectrum)
+	if c == nil || !c.LEDs {
+		return false
+	}
+	// The band equalizer is drawn by the spectrum renderer, so choosing it
+	// turns the animated path on regardless of the old "Спектр PCM" checkbox.
+	return c.SpectrumMode == "eq" || c.Spectrum == nil || *c.Spectrum
 }
 
 // volumeBackend values. An empty value means "luna when the runtime API is
@@ -201,13 +206,14 @@ func validDB(v float64) bool {
 // position on the station. This curve lifts the middle while keeping both
 // endpoints.
 //
-// The quantisation step is 5%, the station's own native grid. It used to be
-// 10%: a 16-position AirPlay slider then put two neighbouring positions into
-// one step, so moving the sender by one notch did nothing (reported on Mini as
-// "no change between the 3rd and 4th level").
+// The quantisation step is 6%. A 16-position AirPlay slider spans 100%, so a
+// uniform step must be close to 100/16 = 6.25% for every notch to reach its own
+// value: with 10% two neighbouring positions collapsed, with 5% the collapse
+// moved to the next pair (reported on Mini as "no change between the 2nd and
+// 3rd level"). 6% gives each of the 16 positions its own step.
 const (
 	volumeCurveExponent = 0.8
-	volumeStepPercent   = 5
+	volumeStepPercent   = 6
 )
 
 func quantizeVolumePercent(percent int) int {
@@ -242,7 +248,11 @@ func dbPercentStep(v float64, step int) int {
 		x = 1
 	}
 	percent := math.Round(100 * math.Pow(x, volumeCurveExponent))
-	return int(math.Round(percent/float64(step))) * step
+	stepped := int(math.Round(percent/float64(step))) * step
+	if stepped > 100 {
+		stepped = 100
+	}
+	return stepped
 }
 func percentDB(v int) float64 {
 	if v <= 0 {

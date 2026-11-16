@@ -62,7 +62,6 @@ type spectrumTap struct {
 	// eqMode paints the three audio bands (bass, middle, treble) as an
 	// equalizer instead of following the artwork palette.
 	eqMode      bool
-	eqColors    [3][3]float64
 	eqIntensity float64
 	// ledLevel is the panel's LED brightness. It is read on every animation
 	// tick so the slider applies without restarting the plugin.
@@ -473,7 +472,7 @@ func (t *spectrumTap) rawFrame(n int, level uint8) []string {
 	blackFloor, ceiling, satBoost := t.blackFloor, t.ceiling, t.satBoost
 	blackColor := t.blackColor
 	lut := t.lut
-	eqMode, eqColors, eqIntensity := t.eqMode, t.eqColors, t.eqIntensity
+	eqMode, eqIntensity := t.eqMode, t.eqIntensity
 	if satBoost < 1 {
 		satBoost = 1
 	}
@@ -508,9 +507,10 @@ func (t *spectrumTap) rawFrame(n int, level uint8) []string {
 		}
 
 		if eqMode {
-			// Three zones across the ring: bass, middle, treble. Each zone has
-			// its own colour and its brightness follows that band only, so the
-			// ring reads like a level meter instead of a tinted cover.
+			// Three zones across the ring: bass, middle, treble. The whole ring
+			// keeps one colour (the artwork's, or the warm white); a band only
+			// changes its brightness, like a level meter. With six LEDs that is
+			// two per band, with three one each, with twenty-four eight each.
 			zone := i * 3 / n
 			if zone > 2 {
 				zone = 2
@@ -528,10 +528,13 @@ func (t *spectrumTap) rawFrame(n int, level uint8) []string {
 			if level > 1 {
 				level = 1
 			}
-			c := eqColors[zone]
-			r := math.Min(1, math.Max(0, c[0]*gain[0]*level))
-			g := math.Min(1, math.Max(0, c[1]*gain[1]*level))
-			b := math.Min(1, math.Max(0, c[2]*gain[2]*level))
+			base := [3]float64{1, .40, .40}
+			if haveColor && rgb != [3]float64{} && !darkCover {
+				base = rgb
+			}
+			r := math.Min(1, math.Max(0, base[0]*gain[0]*level))
+			g := math.Min(1, math.Max(0, base[1]*gain[1]*level))
+			b := math.Min(1, math.Max(0, base[2]*gain[2]*level))
 			frame[i] = fmt.Sprintf("#%02X%02X%02X", int(r*255), int(g*255), int(b*255))
 			continue
 		}
