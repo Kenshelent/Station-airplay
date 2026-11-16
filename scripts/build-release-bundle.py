@@ -161,7 +161,9 @@ def main():
         manifest["depends"] = ["yam/luna >=" + args.luna_min]
         manifest["conflicts"] = sorted(set(manifest.get("conflicts", []) + SPLIT))
         manifest["replaces"] = sorted(set(manifest.get("replaces", []) + SPLIT))
-        description = re.search(r'^description = "([^"]*)"$', text, re.M)
+        description = re.search(
+            r'^description = "([^"]*)"$',
+            payload[RECEIVER + "plugin.toml"][0].decode(), re.M)
         if not description:
             raise SystemExit(f"{target}: receiver plugin.toml has no description")
         # The registry catalogue takes its summary from this field, so keep the
