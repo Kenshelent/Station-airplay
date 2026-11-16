@@ -163,7 +163,7 @@ def main():
         manifest["replaces"] = sorted(set(manifest.get("replaces", []) + SPLIT))
         description = re.search(
             r'^description = "([^"]*)"$',
-            payload[RECEIVER + "plugin.toml"][0].decode(), re.M)
+            (root / "plugin.toml").read_text(), re.M)
         if not description:
             raise SystemExit(f"{target}: receiver plugin.toml has no description")
         # The registry catalogue takes its summary from this field, so keep the
