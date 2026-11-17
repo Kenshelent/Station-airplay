@@ -127,6 +127,30 @@ func processEqualizer(r io.Reader, w io.Writer, cfg equalizerConfig, rate int) e
 		}
 	}
 }
+
+// prepareOptionalEqualizer changes only the invocation's profile, never the
+// saved controls. Missing dependencies bypass the experimental audio EQ and
+// retain the model's proven direct PCM; LED spectrum/EQ is independent.
+func prepareOptionalEqualizer(p stationProfile, exe string, lookPath func(string) (string, error)) (stationProfile, string, string) {
+	if p.eqConfigPath == "" {
+		return p, "", ""
+	}
+	reason := ""
+	rate := profileOutputRate(p)
+	if rate != 44100 && rate != 48000 {
+		reason = fmt.Sprintf("unsupported sample rate %d Hz", rate)
+	} else if _, err := lookPath("aplay"); err != nil {
+		reason = "firmware aplay unavailable"
+	}
+	if reason != "" {
+		p.eqConfigPath = ""
+		return p, "", "experimental audio EQ bypassed: " + reason + "; continuing direct ALSA (saved settings unchanged)"
+	}
+	block := eqAsound(exe, p.eqConfigPath, p.pcm, rate)
+	p.pcm = "spk_equalizer"
+	return p, block, ""
+}
+
 func eqWorker(ctx context.Context, path, pcm string, rate int) error {
 	cfg, err := loadControls(path)
 	if err != nil {

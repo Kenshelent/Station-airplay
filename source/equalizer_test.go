@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"math"
+	"os/exec"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -115,4 +117,61 @@ func BenchmarkEqualizer(b *testing.B) {
 		}
 	}
 	b.SetBytes(int64(len(input)))
+}
+
+// Regression: on original Mini, enabled audio EQ plus missing aplay used to
+// terminate startup before the receiver and its control socket were created.
+func TestOptionalEqualizerMissingAplayPreservesDirectMiniProfile(t *testing.T) {
+	original := stationProfile{pcm: "softvol", receiverABI: "armhf", alsaLib: "/system/vendor/quasar/libs/libasound.so.2", eqConfigPath: "/state/controls.json"}
+	profile, block, warning := prepareOptionalEqualizer(original, "/plugin/bin/station-airplay", func(name string) (string, error) {
+		if name != "aplay" {
+			t.Fatalf("unexpected dependency %q", name)
+		}
+		return "", exec.ErrNotFound
+	})
+	expected := original
+	expected.eqConfigPath = ""
+	if !reflect.DeepEqual(profile, expected) || block != "" || !strings.Contains(warning, "continuing direct ALSA") {
+		t.Fatalf("fallback changed the audio contract: profile=%+v block=%q warning=%q", profile, block, warning)
+	}
+	if original.eqConfigPath != "/state/controls.json" {
+		t.Fatal("mutated the original profile")
+	}
+}
+
+func TestOptionalEqualizerUnsupportedRatePreservesDirectPCM(t *testing.T) {
+	original := stationProfile{pcm: "speakers", outputRate: 96000, eqConfigPath: "/state/controls.json"}
+	profile, block, warning := prepareOptionalEqualizer(original, "/plugin/bin/station-airplay", func(string) (string, error) {
+		t.Fatal("unsupported rate should be rejected before looking for aplay")
+		return "", nil
+	})
+	if profile.pcm != original.pcm || profile.eqConfigPath != "" || block != "" || !strings.Contains(warning, "96000 Hz") {
+		t.Fatalf("unsupported rate did not bypass: %+v %q %q", profile, block, warning)
+	}
+}
+
+func TestOptionalEqualizerAvailableKeepsWorkerPath(t *testing.T) {
+	for _, rate := range []int{44100, 48000} {
+		original := stationProfile{pcm: "softvol", outputRate: rate, eqConfigPath: "/state/controls.json"}
+		profile, block, warning := prepareOptionalEqualizer(original, "/plugin/bin/station-airplay", func(string) (string, error) {
+			return "/usr/bin/aplay", nil
+		})
+		if warning != "" || profile.pcm != "spk_equalizer" || profile.eqConfigPath != original.eqConfigPath {
+			t.Fatalf("working EQ was bypassed: %+v %q", profile, warning)
+		}
+		if block != eqAsound("/plugin/bin/station-airplay", original.eqConfigPath, original.pcm, rate) {
+			t.Fatalf("changed the worker audio contract: %q", block)
+		}
+	}
+}
+
+func TestDisabledOptionalEqualizerDoesNotProbeDependencies(t *testing.T) {
+	original := stationProfile{pcm: "softvol"}
+	profile, block, warning := prepareOptionalEqualizer(original, "/plugin/bin/station-airplay", func(string) (string, error) {
+		t.Fatal("disabled EQ must not look for aplay")
+		return "", nil
+	})
+	if !reflect.DeepEqual(profile, original) || block != "" || warning != "" {
+		t.Fatalf("disabled EQ changed the profile: %+v %q %q", profile, block, warning)
+	}
 }

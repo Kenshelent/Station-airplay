@@ -510,13 +510,13 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 	if err = preflight(p); err != nil {
 		return err
 	}
-	var eqBlock string
-	if p.eqConfigPath != "" {
-		if _, err = exec.LookPath("aplay"); err != nil {
-			return errors.New("experimental EQ requires firmware aplay; disable equalizer to restore direct ALSA")
-		}
-		eqBlock = eqAsound(exe, p.eqConfigPath, p.pcm, profileOutputRate(p))
-		p.pcm = "spk_equalizer"
+	// Experimental processing is optional: an unavailable firmware player must
+	// not prevent the receiver (or its control panel) from starting.
+	p, eqBlock, eqWarning := prepareOptionalEqualizer(p, exe, exec.LookPath)
+	if eqWarning != "" {
+		fmt.Fprintln(os.Stderr, "station-airplay:", eqWarning)
+	}
+	if eqBlock != "" {
 		if err = os.WriteFile(filepath.Join(state, ".asoundrc"), nil, 0600); err != nil {
 			return err
 		}
