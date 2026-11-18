@@ -10,8 +10,8 @@ func originalMini(d yamDevice) bool {
 }
 
 func controlsTickInterval(d yamDevice) time.Duration {
-	if originalMini(d) {
-		return 250 * time.Millisecond
+	if originalMini(d) || d.Model == "yandexmini_2" {
+		return 100 * time.Millisecond
 	}
 	return 500 * time.Millisecond
 }

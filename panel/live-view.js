@@ -39,14 +39,20 @@ function createLiveView({paint, note, now=()=>performance.now()}){
 const liveView=createLiveView({
   paint(frame,bands){
     const strip=$('live-strip');
-    if(strip.children.length!==frame.length){
-      strip.replaceChildren();
-      frame.forEach(()=>strip.append(document.createElement('span')));
-    }
-    frame.forEach((color,i)=>strip.children[i].style.background=color);
-    [...$('live-bands').children].forEach((bar,i)=>{
-      bar.style.transform='scaleX('+bands[i]+')';
+    const ns='http://www.w3.org/2000/svg';
+    const svg=document.createElementNS(ns,'svg');
+    svg.setAttribute('viewBox','0 0 '+(frame.length*30)+' 32');
+    svg.setAttribute('width','100%');svg.setAttribute('height','40');
+    svg.setAttribute('role','img');svg.setAttribute('aria-label','Подтверждённые цвета LED');
+    frame.forEach((color,i)=>{
+      const rect=document.createElementNS(ns,'rect');
+      rect.setAttribute('x',String(i*30));rect.setAttribute('y','0');
+      rect.setAttribute('width','26');rect.setAttribute('height','30');
+      rect.setAttribute('fill',color);
+      svg.append(rect);
     });
+    strip.replaceChildren(svg);
+    [...$('live-bands').querySelectorAll('progress')].forEach((bar,i)=>{bar.value=bands[i];});
   },
   note(text){$('live-note').textContent=text;}
 });

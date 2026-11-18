@@ -46,6 +46,7 @@ jobs:
           python3 panel/make-page.py
           git diff --exit-code -- panel/index.html
           node panel/test-transport.cjs panel/transport.js
+          python3 tests/test_panel_contract.py
       - name: Host migration and namespace checks
         run: |
           python3 tests/test_host_migration.py

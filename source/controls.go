@@ -588,8 +588,12 @@ func (c *sharedController) stopButtonSuppression() {
 
 func (c *sharedController) tick(ctx context.Context, now time.Time) error {
 	c.ledPlay.Store(false)
+	started := time.Now()
 	c.ledSolid.Store(false)
 	s, err := c.receiver.State(ctx)
+	if elapsed := time.Since(started); elapsed > 250*time.Millisecond {
+		fmt.Fprintf(os.Stderr, "volume timing: receiver state=%s success=%t\n", elapsed.Round(time.Millisecond), err == nil)
+	}
 	if err != nil {
 		c.preview.gate(now, false, "receiver unavailable")
 		c.buttonSession.Store(false)
@@ -761,7 +765,7 @@ func (c *sharedController) tick(ctx context.Context, now time.Time) error {
 		if !s.Active || now.Before(c.pausedUntil) {
 			state = "paused"
 		}
-		level := c.cfg.LEDLevel
+		level := currentLEDLevel(c.spectrum, c.cfg.LEDLevel)
 		if level == 0 {
 			if indication {
 				level = 200
@@ -843,10 +847,20 @@ func (c *sharedController) syncVolume(ctx context.Context, s receiverState, now 
 	// A known new sender level wins after initial handoff. SetVolume still
 	// performs the backend's guarded write and readback; avoid only the
 	// redundant native read before that operation in the same tick budget.
-	if c.volumeReady && !c.remotePending && s.Available && s.Client != "" && validDB(s.DB) && math.Abs(s.DB-c.lastDB) > 0.01 {
+	if c.volumeReady && s.Available && s.Client != "" && validDB(s.DB) &&
+		math.Abs(s.DB-c.lastDB) > 0.01 &&
+		(!c.remotePending || math.Abs(s.DB-c.remoteOldDB) > 0.01) {
+		// A genuinely new phone adjustment supersedes an outstanding handoff.
+		// Do not put a potentially slow native GET ahead of its guarded write.
+		// Retained pre-handoff metadata still waits for acknowledgement below.
+		c.remotePending = false
 		return c.applySenderVolume(ctx, s, now)
 	}
+	started := time.Now()
 	v, err := c.station.GetVolume(ctx)
+	if elapsed := time.Since(started); elapsed > 250*time.Millisecond {
+		fmt.Fprintf(os.Stderr, "volume timing: native read=%s success=%t\n", elapsed.Round(time.Millisecond), err == nil)
+	}
 	if err != nil {
 		c.volumeReady = false
 		c.ledQuietUntil = now.Add(2 * time.Second)
@@ -934,7 +948,9 @@ func (c *sharedController) syncVolume(ctx context.Context, s receiverState, now 
 func (c *sharedController) applySenderVolume(ctx context.Context, s receiverState, now time.Time) error {
 	target := dbPercentStep(s.DB, c.volumeStep)
 	fmt.Fprintf(os.Stderr, "volume: sender db=%.2f -> %d%% (last db=%.2f native=%d)\n", s.DB, target, c.lastDB, c.lastNative)
+	started := time.Now()
 	actual, err := c.station.SetVolume(ctx, target)
+	fmt.Fprintf(os.Stderr, "volume timing: write+readback=%s success=%t\n", time.Since(started).Round(time.Millisecond), err == nil)
 	if err != nil {
 		c.volumeReady = false
 		return err

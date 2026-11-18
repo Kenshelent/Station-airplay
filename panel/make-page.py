@@ -9,8 +9,7 @@ transport = (here / 'transport.js').read_text()
 page, count = re.subn(r"async function api\(path,method='GET',body\)\{[^\n]+\}", lambda _:transport, page, count=1)
 assert count == 1
 page = page.replace('<option value="luna">Luna: общий LED backend, без AirPlay</option>', '')
-page = page.replace('<label>Область настройки <select id="scope">', '<label hidden>Область настройки <select id="scope">')
-page = page.replace('</head>', '<style>[hidden]{display:none!important}</style></head>')
+page = page.replace('<label class="fld">Область настройки <select id="scope" class="in">', '<label class="fld hid" hidden>Область настройки <select id="scope" class="in">')
 page = page.replace('Luna · Цвета и звук', 'AirPlay · Цвета и звук')
 page = page.replace('LUNA / ЛОКАЛЬНАЯ КАЛИБРОВКА', 'AIRPLAY / ПАНЕЛЬ ПЛАГИНА')
 page = page.replace('RGB-коррекция общей области Luna применяется сразу к её LED-клиентам.',

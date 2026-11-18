@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	version             = "Station airplay 2.1.18"
+	version             = "Station airplay 2.1.19"
 	audioFIFO           = "/tmp/sps.fifo"
 	spectrumFIFO        = "/tmp/sps-spectrum.fifo"
 	metadataFIFO        = "/tmp/shairport-sync-ap2-metadata"
@@ -454,11 +454,11 @@ type airplayState struct {
 	peaks             [8]float64
 	samples           int
 	offset            int
-	pcmWindow         [1024]float64
+	pcmWindow         [analysisWindowSize]float64
+	pcmRightWindow    [analysisWindowSize]float64
 	pcmCount          int
 	pcmPartial        [4]byte
 	pcmPartialN       int
-	pcmPhase          int
 	wave              [32]float64
 	wavePos           int
 	waveAverageDB     float64
@@ -544,111 +544,18 @@ func (s *airplayState) onMetadata(typ, code string, raw []byte, now time.Time) {
 	}
 }
 
-// spectrumBandHz is one octave apart, so each LED zone covers a comparable
-// share of what a listener hears instead of the whole treble in one zone.
-var spectrumBandHz = [8]float64{60, 120, 250, 500, 1000, 2000, 4000, 8000}
-
-// analyzeSpectrumBands measures eight logarithmic bands for the LED
-// visualizer and keeps a slowly decaying peak per band. It runs on the same
-// window as the legacy four-band analysis.
-func (s *airplayState) analyzeSpectrumBands() {
-	for band, hz := range spectrumBandHz {
-		// Probe the band edges as well as its centre: a single bin left a tone
-		// between two octaves up to 9 dB quieter than the same tone on-centre.
-		magnitude := 0.0
-		for step := -6; step < 6; step++ {
-			probe := hz * math.Pow(2, float64(step)/12)
-			if probe >= 5500 {
-				continue // above Nyquist for the 12 kHz analysis rate
-			}
-			omega := 2 * math.Pi * probe / 12000
-			coeff := 2 * math.Cos(omega)
-			var q0, q1, q2 float64
-			for _, sample := range s.pcmWindow {
-				q0 = sample + coeff*q1 - q2
-				q2, q1 = q1, q0
-			}
-			power := q1*q1 + q2*q2 - coeff*q1*q2
-			if power < 0 {
-				power = 0
-			}
-			if value := math.Sqrt(power) / 512.0; value > magnitude {
-				magnitude = value
-			}
-		}
-		level := (20*math.Log10(math.Max(magnitude, 1e-6)) + 48) / 42
-		if level < .01 {
-			level = 0
-		}
-		if level < 0 {
-			level = 0
-		}
-		if level > 1 {
-			level = 1
-		}
-		// Bass needs a faster attack than treble: with 45 windows per second a
-		// symmetric filter either smears kicks or flickers on cymbals.
-		attack, release := .65, .16
-		if band >= 4 {
-			attack, release = .5, .24
-		}
-		if level > s.bands[band] {
-			s.bands[band] = (1-attack)*s.bands[band] + attack*level
-			s.peaks[band] = math.Max(s.peaks[band], s.bands[band])
-		} else {
-			s.bands[band] = (1-release)*s.bands[band] + release*level
-		}
-		// Peak hold falls back slowly so a hit stays readable for a moment.
-		s.peaks[band] *= .985
-		if s.peaks[band] < s.bands[band] {
-			s.peaks[band] = s.bands[band]
-		}
-	}
-}
-
-// Four independent audio-frequency bands measured from the actual PCM stream.
-// Decimate stereo to 12 kHz mono, then analyze 256-sample windows.
+// analyzeWindow measures complete frequency ranges, rather than individual
+// probe tones. Keep both channels until power calculation so opposite-phase
+// stereo does not cancel the analyser.
 func (s *airplayState) analyzeWindow() {
-	frequencies := [4]float64{95, 330, 1050, 3100}
-	for band, hz := range frequencies {
-		omega := 2 * math.Pi * hz / 12000
-		coeff := 2 * math.Cos(omega)
-		var q0, q1, q2 float64
-		for _, sample := range s.pcmWindow {
-			q0 = sample + coeff*q1 - q2
-			q2, q1 = q1, q0
-		}
-		power := q1*q1 + q2*q2 - coeff*q1*q2
-		if power < 0 {
-			power = 0
-		}
-		magnitude := math.Sqrt(power) / 512.0
-		// Logarithmic response keeps quiet passages visible without constant full bars.
-		level := (20*math.Log10(math.Max(magnitude, 1e-6)) + 48) / 42
-		if level < .02 {
-			// Silence and codec noise must not paint bars.
-			level = 0
-		}
-		if level < 0 {
-			level = 0
-		}
-		if level > 1 {
-			level = 1
-		}
-		if level > s.history[band] {
-			s.history[band] = .4*s.history[band] + .6*level
-		} else {
-			s.history[band] = .78*s.history[band] + .22*level
-		}
-	}
-	s.analyzeSpectrumBands()
-	s.analyzeSpectrumBands()
+	s.analyzeFrequencyRanges()
 	s.level = (s.history[0] + s.history[1] + s.history[2] + s.history[3]) * .25
 	// Keep the original Plum waveform independent of the four-band LED spectrum.
 	// The historical wave moves from the two center digits toward the edges.
 	var sum float64
-	for _, x := range s.pcmWindow {
-		sum += x * x
+	for i, x := range s.pcmWindow {
+		y := s.pcmRightWindow[i]
+		sum += (x*x + y*y) * .5
 	}
 	rms := math.Sqrt(sum / float64(len(s.pcmWindow)))
 	db := -100.0
@@ -675,15 +582,11 @@ func (s *airplayState) analyzeWindow() {
 }
 func (s *airplayState) audio(pcm []byte, now time.Time) {
 	// The file PCM is explicitly constrained to S16_LE stereo. FIFO reads may
-	// split a stereo frame or the decimation stride, so preserve both across
+	// split a stereo frame, so preserve partial frames across
 	// calls rather than treating each read as a new audio stream.
 	rate := s.sampleRate
 	if rate == 0 {
 		rate = 48000
-	}
-	downsample := rate / 12000
-	if downsample < 1 {
-		downsample = 1
 	}
 	for _, value := range pcm {
 		s.pcmPartial[s.pcmPartialN] = value
@@ -694,19 +597,16 @@ func (s *airplayState) audio(pcm []byte, now time.Time) {
 		s.pcmPartialN = 0
 		s.pcmFrames++
 		s.lastAudio = now
-		take := s.pcmPhase == 0
-		s.pcmPhase = (s.pcmPhase + 1) % downsample
-		if !take {
-			continue
-		}
 		l := float64(int16(binary.LittleEndian.Uint16(s.pcmPartial[:2])))
 		r := float64(int16(binary.LittleEndian.Uint16(s.pcmPartial[2:])))
-		s.pcmWindow[s.pcmCount] = (l + r) / 65536
+		s.pcmWindow[s.pcmCount] = l / 32768
+		s.pcmRightWindow[s.pcmCount] = r / 32768
 		s.pcmCount++
 		if s.pcmCount == len(s.pcmWindow) {
 			s.analyzeWindow()
-			const hop = 256
+			hop := analysisHop(rate)
 			copy(s.pcmWindow[:], s.pcmWindow[hop:])
+			copy(s.pcmRightWindow[:], s.pcmRightWindow[hop:])
 			s.pcmCount = len(s.pcmWindow) - hop
 		}
 	}

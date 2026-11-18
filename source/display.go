@@ -148,7 +148,7 @@ func renderDisplay(ctx context.Context, api *yamAPI, metaFD int, exits <-chan ex
 			}
 			colors := state.ringFrame(now)
 			if input.tap != nil && input.spectrumLevel > 0 && !now.Before(state.volumeUntil) && state.status != "paused" && state.playing(now) {
-				colors = input.tap.frame(hw.leds, input.spectrumLevel)
+				colors = input.tap.frame(hw.leds, currentLEDLevel(input.tap, input.spectrumLevel))
 			}
 			ringKey := strings.Join(colors, ",")
 			if ringKey != oldRing || now.Sub(lastRingSent) > 3*time.Second {

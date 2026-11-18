@@ -1,6 +1,6 @@
 package main
 
-// runSpectrumLEDs paints the real PCM bands at 10 Hz. The control tick still
+// runSpectrumLEDs paints the real PCM bands at 20 Hz. The control tick still
 // owns the gates (Alice idle, speech, volume overlay, pause); it publishes a
 // single atomic flag and never blocks on the LED request itself.
 
@@ -12,6 +12,17 @@ import (
 	"os"
 	"time"
 )
+
+// currentLEDLevel is shared by the animator, steady fill and clock renderer.
+// The startup config is immutable; panel writes publish the live level atomically.
+func currentLEDLevel(tap *spectrumTap, fallback uint8) uint8 {
+	if tap != nil {
+		if live := tap.ledLevel.Load(); live > 0 {
+			return uint8(live)
+		}
+	}
+	return fallback
+}
 
 func spectrumLEDLevel(cfg controlsConfig) uint8 {
 	level := cfg.LEDLevel
@@ -90,10 +101,7 @@ func runSpectrumLEDs(ctx context.Context, c *sharedController, tap *spectrumTap,
 				continue
 			}
 			// Read the brightness every tick: the panel changes it live.
-			level := uint8(tap.ledLevel.Load())
-			if level == 0 {
-				level = 200
-			}
+			level := currentLEDLevel(tap, 200)
 			if !c.ledPlay.Load() && !c.ledSolid.Load() {
 				continue
 			}
