@@ -11,8 +11,8 @@ import (
 func TestMiniCandidateTickScope(t *testing.T) {
 	for _, model := range []string{"yandexmini", "YandexStationMini", "yandexmini_2", "plum", "yandexplum", "yandexstation_2", "pickle", ""} {
 		want := 500 * time.Millisecond
-		if model == "yandexmini" || model == "YandexStationMini" {
-			want = 250 * time.Millisecond
+		if model == "yandexmini" || model == "YandexStationMini" || model == "yandexmini_2" {
+			want = 100 * time.Millisecond
 		}
 		if got := controlsTickInterval(yamDevice{Model: model}); got != want {
 			t.Fatalf("%s: tick %v, want %v", model, got, want)

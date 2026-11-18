@@ -1,70 +1,69 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AirPlay · Цвета и звук</title>
-<style>
-:root{color-scheme:dark;--bg:#10131c;--card:#1a2030;--line:#343e55;--text:#edf0f8;--muted:#a4b0c9;--accent:#ad97ff}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px system-ui,sans-serif;zoom:.85}main{max-width:1100px;margin:auto;padding:28px 18px 64px}a{color:var(--accent)}header{display:flex;justify-content:space-between;align-items:center;gap:16px}h1{font-size:28px;margin:8px 0}h2{font-size:20px;margin:0 0 18px}p{line-height:1.5}.muted,small{color:var(--muted)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;margin-top:18px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}label{display:block;margin:14px 0}input,select,button{font:inherit}input[type=range]{width:100%;accent-color:var(--accent)}input[type=text],input[type=number],select{background:var(--bg);border:1px solid var(--line);border-radius:9px;color:var(--text);padding:9px;max-width:100%}input[type=color]{width:64px;height:42px;background:none;border:0}button,.button{background:var(--accent);color:#171027;border:0;border-radius:9px;padding:10px 15px;cursor:pointer;text-decoration:none}button.secondary{background:#303a52;color:var(--text)}button.danger{background:#613c4d;color:#fff}button:disabled{opacity:.5;cursor:default}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #e3d9ff;outline-offset:3px}.status{font:13px ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;min-height:30px}.warning{border-left:3px solid #e3b45c;padding-left:12px;color:#ecd4a3}canvas{display:block;width:100%;max-width:360px;margin:12px auto;touch-action:none}.labelrow{display:flex;justify-content:space-between;gap:8px}.bands{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}.bands input{width:100%}.points{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}.points label{display:flex;flex-direction:column;gap:6px;margin:0;font-size:13px;color:var(--muted)}.points input[type=color]{width:100%;height:42px;border:1px solid var(--line);border-radius:9px;padding:2px}details{margin-top:16px}summary{cursor:pointer}.swatches button{width:32px;height:32px;padding:0;border:1px solid #63718b}.sticky{position:fixed;right:14px;top:96px;width:264px;display:flex;flex-direction:column;gap:10px;box-shadow:0 4px 30px #0008;z-index:20}.sticky .row{flex-direction:column;align-items:stretch;gap:8px}.sticky button{width:100%}#dirty{font-size:13px;color:#ffd9a3}#dirty.on{color:#ffb454;font-weight:600}@media(min-width:981px){main{padding-right:310px}}@media(max-width:980px){.sticky{position:static;width:auto;margin-top:18px}.sticky .row{flex-direction:row;align-items:center}}.error{color:#ffb6b6}.ok{color:#9ce1be}@media(max-width:740px){.grid{grid-template-columns:1fr}header{align-items:flex-start}.card{padding:18px}.bands{gap:6px}}
-.live-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(16px,1fr));gap:6px;margin:12px 0}.live-strip span{display:block;height:30px;border-radius:6px;background:#000;box-shadow:inset 0 0 0 1px #2a3446}.live-bands{display:grid;gap:6px}.live-bands i{display:block;height:5px;border-radius:3px;background:var(--accent);transform-origin:left;transition:transform .1s linear}</style><style>[hidden]{display:none!important}</style></head><body><main>
-<header><div><small>AIRPLAY / ПАНЕЛЬ ПЛАГИНА</small><h1>Цвета и звук</h1><div id="device" class="muted">Подключение…</div></div></header>
-<p class="muted">Настройка кольца или логотипа без ADB. Тестовый кадр получает временное владение LED, а не спорит с AirPlay за каждый кадр.</p>
-<label hidden>Область настройки <select id="scope"><option value="airplay">AirPlay: обложки, задержка и EQ</option></select></label>
-<p id="scope-note" class="muted">Цвета, яркость и эффекты применяются сразу после сохранения. Эквалайзер и режим задержки — после перезапуска.</p>
-<div id="message" role="status" aria-live="polite" class="status"></div>
-<label>Выход LED <select id="output-zone" aria-label="Выход LED"></select></label>
-<div class="grid"><section class="card"><h2>Тестовый цвет и зоны</h2>
-<div class="row"><input id="color" aria-label="Цвет" type="color" value="#7950d0"><input id="hex" aria-label="HEX цвет" type="text" value="#7950D0" maxlength="7"><button class="secondary" id="fill">На все зоны</button></div>
+<link rel="stylesheet" href="/luna-panel.css">
+<script>(function(){var t;try{t=localStorage.getItem('luna-theme')}catch(e){}document.documentElement.dataset.theme=t||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')})()</script></head><body><main class="wrap">
+<div class="head"><div><h1>Цвета и звук</h1><div id="device" class="mut">Подключение…</div></div></div>
+<section class="card"><h2>Состояние</h2><p class="mut">Настройка кольца или логотипа без ADB. Тестовый кадр получает временное владение LED, а не спорит с AirPlay за каждый кадр.</p>
+<label class="fld hid" hidden>Область настройки <select id="scope" class="in"><option value="airplay">AirPlay: обложки, задержка и EQ</option></select></label>
+<p id="scope-note" class="mut">Цвета, яркость и эффекты применяются сразу после сохранения. Эквалайзер и режим задержки — после перезапуска.</p>
+<div id="message" role="status" aria-live="polite" class="mut"></div>
+<label class="fld">Выход LED <select id="output-zone" aria-label="Выход LED" class="in"></select></label>
+</section><div class="g2"><section class="card"><h2>Тестовый цвет и зоны</h2>
+<div class="row"><input id="color" aria-label="Цвет" type="color" value="#7950d0"><input id="hex" aria-label="HEX цвет" type="text" value="#7950D0" maxlength="7" class="in"><button class="btn" id="fill">На все зоны</button></div>
 <div id="rgb"></div><div id="hsv"></div>
 <canvas id="ring" width="360" height="320" aria-label="Превью LED: выберите зону" tabindex="0"></canvas>
-<div class="row"><label>Зона <input id="zone" aria-label="Номер зоны" type="number" min="1" value="1" style="width:80px"></label><button id="paint-zone" class="secondary">Покрасить зону</button></div>
-<div class="swatches row" id="swatches"></div>
-<label>Тестовый рисунок <select id="pattern"><option value="solid">Сплошной цвет</option><option value="rgb">RGB по зонам</option><option value="white">Белый</option><option value="grey">Серый</option><option value="black">Чёрная обложка</option></select></label>
-<label>Обложка с этого устройства <input id="image" type="file" accept="image/*"></label>
+<div class="row"><label class="fld">Зона <input id="zone" aria-label="Номер зоны" type="number" min="1" value="1" class="in"></label><button id="paint-zone" class="btn">Покрасить зону</button></div>
+<div class="chips" id="swatches"></div>
+<label class="fld">Тестовый рисунок <select id="pattern" class="in"><option value="solid">Сплошной цвет</option><option value="rgb">RGB по зонам</option><option value="white">Белый</option><option value="grey">Серый</option><option value="black">Чёрная обложка</option></select></label>
+<label class="fld">Обложка с этого устройства <input id="image" class="in" type="file" accept="image/*"></label>
 <small>Изображение обрабатывается в браузере. Выборка для теста — не точная копия алгоритма кластеров AirPlay.</small>
-<div class="row" style="margin-top:18px"><button id="preview">Начать предпросмотр</button><button id="stop" class="danger" disabled>Вернуть управление</button></div>
-<p class="muted">Если закрыть вкладку или helper не успеет продлить lease, тест закончится примерно через 4 с. Не открывайте несколько панелей одновременно. Алиса и полоса громкости имеют приоритет; задержка реакции ограничена тиком управления.</p>
-<div id="owner" class="status"></div><details><summary>Отправленный кадр</summary><pre id="sent" class="status"></pre></details>
+<div class="row"><button id="preview" class="btn pri">Начать предпросмотр</button><button id="stop" class="btn dng" disabled>Вернуть управление</button></div>
+<p class="mut">Если закрыть вкладку или helper не успеет продлить lease, тест закончится примерно через 4 с. Не открывайте несколько панелей одновременно. Алиса и полоса громкости имеют приоритет; задержка реакции ограничена тиком управления.</p>
+<div id="owner" class="mut"></div><details><summary>Отправленный кадр</summary><pre id="sent" class="mut"></pre></details>
 </section><section class="card"><h2>Калибровка цвета</h2><div id="gains"></div>
-<label>Яркость LED <input id="level" type="range" min="1" max="255" value="200"><output id="level-value"></output></label>
-<label>Усиление спектра <input id="brightness" type="range" min="0" max="2" step="0.05" value="1"><output id="brightness-value"></output></label>
-<label>Насыщенность <input id="saturation" type="range" min="1" max="2" step="0.05" value="1"><output id="saturation-value"></output></label>
-<label><input id="spectrum" type="checkbox"> Спектр PCM (выключено — заливка обложки)</label>
-<label>Режим индикации <select id="spectrum-mode"><option value="palette">Обложка и спектр</option><option value="eq">Эквалайзер: бас / середина / верх</option></select></label>
-<label>Интенсивность эквалайзера <input id="eq-intensity" type="range" min="0.3" max="2" step="0.05" value="1"><output id="eq-intensity-value"></output></label>
-<button id="defaults" class="secondary">Вернуть параметры модели</button>
-<p class="muted">Стоковая матрица Mini 2 и порядок каналов сохраняются. На превью справа в диагностике виден уже подготовленный кадр, но оптику реальных LED экран не имитирует.</p>
+<label class="fld">Яркость LED <input id="level" type="range" min="1" max="255" value="200" class="in"><output id="level-value"></output></label>
+<label class="fld">Усиление спектра <input id="brightness" type="range" min="0" max="2" step="0.05" value="1" class="in"><output id="brightness-value"></output></label>
+<label class="fld">Насыщенность <input id="saturation" type="range" min="1" max="2" step="0.05" value="1" class="in"><output id="saturation-value"></output></label>
+<label class="sw"> Спектр PCM (выключено — заливка обложки)<input id="spectrum" type="checkbox"></label>
+<label class="fld">Режим индикации <select id="spectrum-mode" class="in"><option value="palette">Обложка и спектр</option><option value="eq">Эквалайзер: бас / середина / верх</option></select></label>
+<label class="fld">Интенсивность эквалайзера <input id="eq-intensity" type="range" min="0.3" max="2" step="0.05" value="1" class="in"><output id="eq-intensity-value"></output></label>
+<button id="defaults" class="btn">Вернуть параметры модели</button>
+<p class="mut">Стоковая матрица Mini 2 и порядок каналов сохраняются. В диагностике предпросмотра виден уже подготовленный кадр, но оптику реальных LED экран не имитирует.</p>
 </section></div>
 <section class="card"><h2>Индикация сейчас</h2>
-<div class="live-strip" id="live-strip"></div>
-<div class="live-bands" id="live-bands"><i></i><i></i><i></i><i></i></div>
-<p id="live-note" class="muted">Последний кадр, подтверждённый LED API Luna, с номером и возрастом. Опрос без повторов; экран не измеряет физический цвет логотипа.</p>
+<div id="live-strip"></div>
+<div id="live-bands" class="g2"><label class="fld">Бас<progress max="1" value="0" aria-label="Бас"></progress></label><label class="fld">Нижняя середина<progress max="1" value="0" aria-label="Нижняя середина"></progress></label><label class="fld">Верхняя середина<progress max="1" value="0" aria-label="Верхняя середина"></progress></label><label class="fld">Верх<progress max="1" value="0" aria-label="Верх"></progress></label></div>
+<p id="live-note" class="mut">Последний кадр, подтверждённый LED API Luna, с номером и возрастом. Опрос без повторов; экран не измеряет физический цвет логотипа.</p>
 </section>
 <section class="card"><h2>Цвета основных точек</h2>
-<p class="muted">Каждое поле — цвет, который реально уходит на LED для этой точки обложки. Между точками таблица интерполируется, поэтому правка оранжевого не сдвигает красный и жёлтый. Чёрная точка задаёт свечение чёрной обложки: её яркость ниже, ноль выключает свечение.</p>
-<div class="points" id="points">
-<label>Серый <input id="point-grey" type="color" value="#808080"></label>
-<label>Красный <input id="point-red" type="color" value="#FF0000"></label>
-<label>Зелёный <input id="point-green" type="color" value="#00FF00"></label>
-<label>Синий <input id="point-blue" type="color" value="#0000FF"></label>
-<label>Жёлтый <input id="point-yellow" type="color" value="#FFFF00"></label>
-<label>Голубой <input id="point-cyan" type="color" value="#00FFFF"></label>
-<label>Пурпурный <input id="point-magenta" type="color" value="#FF00FF"></label>
-<label>Оранжевый <input id="point-orange" type="color" value="#FF8000"></label>
-<label>Белый <input id="point-white" type="color" value="#FFFFFF"></label>
+<p class="mut">Каждое поле — цвет, который реально уходит на LED для этой точки обложки. Между точками таблица интерполируется, поэтому правка оранжевого не сдвигает красный и жёлтый. Чёрная точка задаёт свечение чёрной обложки: её яркость ниже, ноль выключает свечение.</p>
+<div class="g3" id="points">
+<label class="fld">Серый <input id="point-grey" type="color" value="#808080"></label>
+<label class="fld">Красный <input id="point-red" type="color" value="#FF0000"></label>
+<label class="fld">Зелёный <input id="point-green" type="color" value="#00FF00"></label>
+<label class="fld">Синий <input id="point-blue" type="color" value="#0000FF"></label>
+<label class="fld">Жёлтый <input id="point-yellow" type="color" value="#FFFF00"></label>
+<label class="fld">Голубой <input id="point-cyan" type="color" value="#00FFFF"></label>
+<label class="fld">Пурпурный <input id="point-magenta" type="color" value="#FF00FF"></label>
+<label class="fld">Оранжевый <input id="point-orange" type="color" value="#FF8000"></label>
+<label class="fld">Белый <input id="point-white" type="color" value="#FFFFFF"></label>
 </div>
-<label><input id="override-black" type="checkbox"> Переопределить чёрную обложку (иначе профиль модели)</label>
-<label>Яркость чёрной обложки <input id="floor" type="range" min="0" max="0.3" step="0.005" value="0.07"><output id="floor-value"></output></label>
-<label>Чёрная точка <input id="black-color" type="color" value="#808080"></label>
-<div class="row"><button id="points-reset" class="secondary">Вернуть цвета точек</button></div>
-<small>Таблица применяется после перезапуска AirPlay. Пресеты сохраняют точки вместе с остальными параметрами.</small>
+<label class="sw"> Переопределить чёрную обложку (иначе профиль модели)<input id="override-black" type="checkbox"></label>
+<label class="fld">Яркость чёрной обложки <input id="floor" type="range" min="0" max="0.3" step="0.005" value="0.07" class="in"><output id="floor-value"></output></label>
+<label class="fld">Чёрная точка <input id="black-color" type="color" value="#808080"></label>
+<div class="row"><button id="points-reset" class="btn">Вернуть цвета точек</button></div>
+<small>Таблица применяется после сохранения. Пресеты сохраняют точки вместе с остальными параметрами.</small>
 </section>
-<section class="card"><h2>Задержка и видео</h2><label>Режим <select id="timing"><option value="fast_audio">Быстрый звук — опережение 1.7 с (по умолчанию)</option><option value="synchronized">Синхронно — для видео / мультирума</option></select></label><p class="warning">Быстрый звук может опережать видео. Изменения применяются после перезапуска плагина, не посреди трека. Синхронный режим требует живой проверки с конкретным плеером.</p></section>
-<section class="card"><h2>Эквалайзер AirPlay · экспериментальный</h2><label><input id="eq-on" type="checkbox"> Включить EQ только для AirPlay</label>
-<p class="warning">Не влияет на Алису и штатную музыку. Прототип через firmware aplay; задержка, CPU и поведение ALSA на реальных моделях ещё не проверены. По умолчанию выключен. Включайте только для теста.</p>
-<div class="bands" id="eq-bands"></div><label>Предусиление <input id="preamp" type="range" min="-24" max="0" step="0.5" value="0"><output id="preamp-value"></output> dB</label><small>Для положительных полос автоматически резервируется дополнительный запас по сумме усилений. Поэтому громкость может стать тише; это защита от перегруза.</small>
-<div class="row" style="margin-top:16px"><button id="flat" class="secondary">Сбросить EQ</button></div></section>
-<section class="card"><h2>Обновление</h2><p class="muted">Ставит свежий пакет из реестра: останавливает приёмник, обновляет пакет и включает всё обратно. AirPlay прервётся на время установки — обычно это 10–40 секунд.</p><div class="row"><button id="update">Обновить AirPlay</button><span id="update-version" class="muted"></span></div><p id="update-status" class="muted"></p></section>
-<section class="card"><h2>Пресеты</h2><div class="row"><input id="preset-name" aria-label="Имя пресета" type="text" placeholder="Название" maxlength="60"><button id="store-preset">Сохранить пресет</button><select id="presets" aria-label="Список пресетов"></select><button id="load-preset" class="secondary">Загрузить</button><button id="delete-preset" class="secondary">Удалить</button></div>
-<div class="row" style="margin-top:16px"><button id="export" class="secondary">Экспорт JSON</button><label>Импорт <input id="import" type="file" accept="application/json,.json"></label></div><small>Пресеты хранятся в данных AirPlay на колонке. Переносятся только параметры цвета, задержки и EQ — не голосовые настройки и не разрешения плагина.</small></section>
-<section class="card sticky"><div class="row"><button id="save" disabled>Сохранить настройки</button><button id="cancel" class="secondary">Отменить изменения</button><span id="dirty" class="muted">Загрузка…</span></div><small>Сохранение не перезапускает колонку или плагин: цвета и эффекты подхватываются на ходу. Эквалайзер и режим задержки применяются после перезапуска плагина. Для отката используйте резервные настройки или параметры модели.</small></section>
+<section class="card"><h2>Задержка и видео</h2><label class="fld">Режим <select id="timing" class="in"><option value="fast_audio">Быстрый звук — опережение 1.7 с (по умолчанию)</option><option value="synchronized">Синхронно — для видео / мультирума</option></select></label><p class="warn">Быстрый звук может опережать видео. Изменения применяются после перезапуска плагина, не посреди трека. Синхронный режим требует живой проверки с конкретным плеером.</p></section>
+<section class="card"><h2>Эквалайзер AirPlay · экспериментальный</h2><label class="sw"> Включить EQ только для AirPlay<input id="eq-on" type="checkbox"></label>
+<p class="warn">Не влияет на Алису и штатную музыку. Прототип через firmware aplay; задержка, CPU и поведение ALSA на реальных моделях ещё не проверены. По умолчанию выключен. Включайте только для теста.</p>
+<div class="g3" id="eq-bands"></div><label class="fld">Предусиление <input id="preamp" type="range" min="-24" max="0" step="0.5" value="0" class="in"><output id="preamp-value"></output> dB</label><small>Для положительных полос резервируется до 6 дБ; пики ограничивает мягкий лимитер. Отрицательное предусиление дополнительно уменьшает громкость.</small>
+<div class="row"><button id="flat" class="btn">Сбросить EQ</button></div></section>
+<section class="card"><h2>Обновление</h2><p class="mut">Ставит свежий пакет из реестра: останавливает приёмник, обновляет пакет и включает всё обратно. AirPlay прервётся на время установки — обычно это 10–40 секунд.</p><div class="row"><button id="update" class="btn pri">Обновить AirPlay</button><span id="update-version" class="mut"></span></div><p id="update-status" class="mut"></p></section>
+<section class="card"><h2>Пресеты</h2><div class="row"><input id="preset-name" aria-label="Имя пресета" type="text" placeholder="Название" maxlength="60" class="in"><button id="store-preset" class="btn pri">Сохранить пресет</button><select id="presets" aria-label="Список пресетов" class="in"></select><button id="load-preset" class="btn">Загрузить</button><button id="delete-preset" class="btn">Удалить</button></div>
+<div class="row"><button id="export" class="btn">Экспорт JSON</button><label class="fld">Импорт <input id="import" class="in" type="file" accept="application/json,.json"></label></div><small>Пресеты хранятся в данных AirPlay на колонке. Переносятся только параметры цвета, задержки и EQ — не голосовые настройки и не разрешения плагина.</small></section>
+<section class="card"><div class="row"><button id="save" disabled class="btn pri">Сохранить настройки</button><button id="cancel" class="btn">Отменить изменения</button><span id="dirty" class="chip">Загрузка…</span></div><small>Сохранение не перезапускает колонку или плагин: цвета и эффекты подхватываются на ходу. Эквалайзер и режим задержки применяются после перезапуска плагина. Для отката используйте резервные настройки или параметры модели.</small></section>
 </main><script>
 'use strict';
 const $=id=>document.getElementById(id), frequencies=[60,250,1000,4000,12000];
@@ -72,7 +71,7 @@ const keys=['timing_mode','equalizer','spectrum','spectrum_brightness','spectrum
 const pointDefaults={grey:'#808080',red:'#FF0000',green:'#00FF00',blue:'#0000FF',yellow:'#FFFF00',cyan:'#00FFFF',magenta:'#FF00FF',orange:'#FF8000',white:'#FFFFFF'};
 const pointNodes={grey:[1,1,1],red:[2,0,0],green:[0,2,0],blue:[0,0,2],yellow:[2,2,0],cyan:[0,2,2],magenta:[2,0,2],orange:[2,1,0],white:[2,2,2]};
 let original={}, model='', scope='airplay', ledCount=0, colors=[], presetData={}, serverDefaults={}, zoneSpec='', lease='', running=false, busy=false, heartbeat=null, poll=null, selected='#7950D0';
-function message(text,error=false){$('message').textContent=text;$('message').className='status '+(error?'error':'ok');}
+function message(text,error=false){$('message').textContent=text;$('message').className='pill '+(error?'bad':'ok');}
 // Same-origin transport for official Luna 0.2.26. No browser runtime tokens.
 let rpcEpoch='',rpcQueue=Promise.resolve();
 const pendingReads=new Map();
@@ -130,14 +129,14 @@ function api(path,method='GET',body){
   return task;
 }
 
-function slider(parent,id,label,min,max,step,value){const box=document.createElement('label'),row=document.createElement('span'),out=document.createElement('output'),input=document.createElement('input');box.htmlFor=id;row.className='labelrow';row.textContent=label;out.id=id+'-value';input.id=id;input.setAttribute('aria-label',label);input.type='range';input.min=min;input.max=max;input.step=step;input.value=value;row.append(out);box.append(row,input);$(parent).append(box);input.addEventListener('input',()=>out.textContent=input.value);out.textContent=value;return input;}
+function slider(parent,id,label,min,max,step,value){const box=document.createElement('label'),row=document.createElement('span'),out=document.createElement('output'),input=document.createElement('input');box.className='fld';input.className='in';box.htmlFor=id;row.className='row';row.textContent=label;out.id=id+'-value';input.id=id;input.setAttribute('aria-label',label);input.type='range';input.min=min;input.max=max;input.step=step;input.value=value;row.append(out);box.append(row,input);$(parent).append(box);input.addEventListener('input',()=>out.textContent=input.value);out.textContent=value;return input;}
 ['R','G','B'].forEach((c,i)=>{slider('rgb','rgb'+i,c,0,255,1,[121,80,208][i]).addEventListener('input',()=>setColor(toHex([0,1,2].map(j=>+$('rgb'+j).value)),false));slider('gains','gain'+i,'Баланс '+c,.05,4,.05,1);});
 ['H','S','V'].forEach((c,i)=>slider('hsv','hsv'+i,c,i?0:0,i?100:360,1,[258,62,82][i]).addEventListener('input',()=>{const h=+$('hsv0').value/60,s=+$('hsv1').value/100,v=+$('hsv2').value/100;const f=n=>{let k=(n+h)%6;return v-v*s*Math.max(0,Math.min(k,4-k,1));};setColor(toHex([f(5),f(3),f(1)].map(v=>v*255)),true,false);}));
 frequencies.forEach((f,i)=>slider('eq-bands','eq'+i,f<1000?f+' Hz':f/1000+' kHz',-12,12,.5,0));
 function toHex(rgb){return '#'+rgb.map(x=>Math.round(Math.min(255,Math.max(0,x))).toString(16).padStart(2,'0')).join('').toUpperCase();}
 function rgb(hex){return [1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));}
 function setColor(hex,updateRGB=true,updateHSV=true){if(!/^#[0-9a-f]{6}$/i.test(hex))return;selected=hex.toUpperCase();$('color').value=selected;$('hex').value=selected;const c=rgb(selected);if(updateRGB)c.forEach((v,i)=>{$('rgb'+i).value=v;$('rgb'+i+'-value').textContent=v;});if(updateHSV){let [r,g,b]=c.map(x=>x/255),mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn,h=0;if(d)h=(mx===r?((g-b)/d+6)%6:mx===g?(b-r)/d+2:(r-g)/d+4)*60;[h,mx?d/mx*100:0,mx*100].forEach((v,i)=>{$('hsv'+i).value=Math.round(v);$('hsv'+i+'-value').textContent=Math.round(v);});}pattern();}
-function paint(){const canvas=$('ring'),ctx=canvas.getContext('2d');ctx.clearRect(0,0,360,320);const n=colors.length;for(let i=0;i<n;i++){const angle=i*2*Math.PI/n-Math.PI/2,x=180+112*Math.cos(angle),y=150+112*Math.sin(angle);ctx.beginPath();ctx.arc(x,y,n>30?5:18,0,Math.PI*2);ctx.fillStyle=colors[i];ctx.fill();if(i===+$('zone').value-1){ctx.lineWidth=3;ctx.strokeStyle='#fff';ctx.stroke();}}ctx.fillStyle='#b7c3db';ctx.textAlign='center';ctx.font='16px system-ui';ctx.fillText(n?n+' зон':'LED недоступны',180,155);}
+function paint(){const canvas=$('ring'),parent=canvas.parentElement,box=getComputedStyle(parent),width=Math.max(1,Math.min(360,parent.clientWidth-parseFloat(box.paddingLeft)-parseFloat(box.paddingRight))),ctx=canvas.getContext('2d');canvas.width=width;canvas.height=Math.round(width*320/360);ctx.setTransform(width/360,0,0,width/360,0,0);ctx.clearRect(0,0,360,320);const n=colors.length;for(let i=0;i<n;i++){const angle=i*2*Math.PI/n-Math.PI/2,x=180+112*Math.cos(angle),y=150+112*Math.sin(angle);ctx.beginPath();ctx.arc(x,y,n>30?5:18,0,Math.PI*2);ctx.fillStyle=colors[i];ctx.fill();if(i===+$('zone').value-1){ctx.lineWidth=3;ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--text').trim();ctx.stroke();}}ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--mut').trim();ctx.textAlign='center';ctx.font='16px '+getComputedStyle(document.body).fontFamily;ctx.fillText(n?n+' зон':'LED недоступны',180,155);}
 function pattern(){const p=$('pattern').value;colors=Array.from({length:ledCount},(_,i)=>p==='rgb'?['#FF0000','#00FF00','#0000FF'][i%3]:p==='white'?'#FFFFFF':p==='grey'?'#808080':p==='black'?$('black-color').value:selected);paint();}
 function pointHex(name){const el=$('point-'+name);return (el?el.value:pointDefaults[name]).toUpperCase();}
 function pointLUT(){const lut=new Array(27);for(let r=0;r<3;r++)for(let g=0;g<3;g++)for(let b=0;b<3;b++)lut[(r*3+g)*3+b]=[r/2,g/2,b/2];for(const name of Object.keys(pointNodes)){const [r,g,b]=pointNodes[name];lut[(r*3+g)*3+b]=rgb(pointHex(name)).map(v=>v/255);}return lut;}
@@ -146,7 +145,7 @@ function readPoints(){const out={};for(const name of Object.keys(pointDefaults))
 function previewFrame(){const pattern=$('pattern').value,lut=pattern==='black'?null:pointLUT(),brightness=pattern==='black'?+$('floor').value*2:Math.min(1,+$('level').value/200);const gains=[0,1,2].map(i=>+$('gain'+i).value);return colors.map(hex=>{let values=rgb(hex).map(x=>x/255),l=values[0]*.2126+values[1]*.7152+values[2]*.0722,s=+$('saturation').value;values=values.map(x=>Math.min(1,Math.max(0,l+(x-l)*s)));if(lut)values=applyPoints(values,lut);return toHex(values.map((x,i)=>x*gains[i]*brightness*255));});}
 function tuning(){return {timing_mode:$('timing').value,spectrum:$('spectrum').checked||$('spectrum-mode').value==='eq',spectrum_brightness:+$('brightness').value,spectrum_gain_r:+$('gain0').value,spectrum_gain_g:+$('gain1').value,spectrum_gain_b:+$('gain2').value,spectrum_saturation:+$('saturation').value,spectrum_black_floor:+$('floor').value,spectrum_black_color:$('black-color').value,spectrum_points:readPoints(),led_level:+$('level').value,spectrum_mode:$('spectrum-mode').value,spectrum_eq_intensity:+$('eq-intensity').value,equalizer:{enabled:$('eq-on').checked,preamp_db:+$('preamp').value,bands_db:frequencies.map((_,i)=>+$('eq'+i).value)}};}
 function defaults(){return Object.assign({spectrum:true,spectrum_gain_r:1,spectrum_gain_g:1,spectrum_gain_b:1,spectrum_brightness:1,spectrum_saturation:1,spectrum_black_floor:0,spectrum_black_color:'#808080',spectrum_points:Object.assign({},pointDefaults),led_level:200,spectrum_mode:'palette',spectrum_eq_intensity:1,timing_mode:'fast_audio',equalizer:{enabled:false,preamp_db:0,bands_db:[0,0,0,0,0]}},serverDefaults);}
-function populate(cfg){const c=Object.assign(defaults(),cfg),pairs={gain0:'spectrum_gain_r',gain1:'spectrum_gain_g',gain2:'spectrum_gain_b',level:'led_level',brightness:'spectrum_brightness',saturation:'spectrum_saturation',floor:'spectrum_black_floor',preamp:'preamp_db'};Object.entries(pairs).forEach(([id,key])=>{if(id==='preamp')return;$(id).value=c[key]|| (id==='floor'?0:defaults()[key]);if($(id+'-value'))$(id+'-value').textContent=$(id).value;});$('timing').value=c.timing_mode||'fast_audio';$('spectrum').checked=c.spectrum!==false;$('spectrum-mode').value=c.spectrum_mode==='eq'?'eq':'palette';if(c.spectrum_mode==='eq')$('spectrum').checked=true;$('eq-intensity').value=c.spectrum_eq_intensity||1;$('eq-intensity-value').textContent=$('eq-intensity').value;$('black-color').value=c.spectrum_black_color||'#808080';const pts=c.spectrum_points||{};Object.keys(pointDefaults).forEach(name=>{const el=$('point-'+name);if(el)el.value=(pts[name]||pointDefaults[name]).toUpperCase();});const eq=c.equalizer||defaults().equalizer;$('eq-on').checked=!!eq.enabled;$('preamp').value=eq.preamp_db||0;$('preamp-value').textContent=$('preamp').value;frequencies.forEach((_,i)=>{$('eq'+i).value=(eq.bands_db||[])[i]||0;$('eq'+i+'-value').textContent=$('eq'+i).value;});pattern();}
+function populate(cfg){const c=Object.assign(defaults(),cfg),pairs={gain0:'spectrum_gain_r',gain1:'spectrum_gain_g',gain2:'spectrum_gain_b',level:'led_level',brightness:'spectrum_brightness',saturation:'spectrum_saturation',floor:'spectrum_black_floor',preamp:'preamp_db'};Object.entries(pairs).forEach(([id,key])=>{if(id==='preamp')return;$(id).value=c[key]??(id==='floor'?0:defaults()[key]);if($(id+'-value'))$(id+'-value').textContent=$(id).value;});$('timing').value=c.timing_mode||'fast_audio';$('spectrum').checked=c.spectrum!==false;$('spectrum-mode').value=c.spectrum_mode==='eq'?'eq':'palette';if(c.spectrum_mode==='eq')$('spectrum').checked=true;$('eq-intensity').value=c.spectrum_eq_intensity||1;$('eq-intensity-value').textContent=$('eq-intensity').value;$('black-color').value=c.spectrum_black_color||'#808080';const pts=c.spectrum_points||{};Object.keys(pointDefaults).forEach(name=>{const el=$('point-'+name);if(el)el.value=(pts[name]||pointDefaults[name]).toUpperCase();});const eq=c.equalizer||defaults().equalizer;$('eq-on').checked=!!eq.enabled;$('preamp').value=eq.preamp_db||0;$('preamp-value').textContent=$('preamp').value;frequencies.forEach((_,i)=>{$('eq'+i).value=(eq.bands_db||[])[i]||0;$('eq'+i+'-value').textContent=$('eq'+i).value;});pattern();}
 // The helper is a request/reply transport, not a realtime stream. Show only the
 // newest acknowledged output, never loop or replay old frames as live motion.
 function createLiveView({paint, note, now=()=>performance.now()}){
@@ -188,14 +187,20 @@ function createLiveView({paint, note, now=()=>performance.now()}){
 const liveView=createLiveView({
   paint(frame,bands){
     const strip=$('live-strip');
-    if(strip.children.length!==frame.length){
-      strip.replaceChildren();
-      frame.forEach(()=>strip.append(document.createElement('span')));
-    }
-    frame.forEach((color,i)=>strip.children[i].style.background=color);
-    [...$('live-bands').children].forEach((bar,i)=>{
-      bar.style.transform='scaleX('+bands[i]+')';
+    const ns='http://www.w3.org/2000/svg';
+    const svg=document.createElementNS(ns,'svg');
+    svg.setAttribute('viewBox','0 0 '+(frame.length*30)+' 32');
+    svg.setAttribute('width','100%');svg.setAttribute('height','40');
+    svg.setAttribute('role','img');svg.setAttribute('aria-label','Подтверждённые цвета LED');
+    frame.forEach((color,i)=>{
+      const rect=document.createElementNS(ns,'rect');
+      rect.setAttribute('x',String(i*30));rect.setAttribute('y','0');
+      rect.setAttribute('width','26');rect.setAttribute('height','30');
+      rect.setAttribute('fill',color);
+      svg.append(rect);
     });
+    strip.replaceChildren(svg);
+    [...$('live-bands').querySelectorAll('progress')].forEach((bar,i)=>{bar.value=bands[i];});
   },
   note(text){$('live-note').textContent=text;}
 });
@@ -230,7 +235,7 @@ function renderPresets(){$('presets').replaceChildren();Object.keys(presetData).
 function safeTuning(value){if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Нужен объект настроек');const result={};for(const key of keys)if(Object.hasOwn(value,key))result[key]=value[key];return result;}
 $('color').oninput=e=>setColor(e.target.value);$('hex').onchange=e=>{if(!/^#[0-9a-f]{6}$/i.test(e.target.value)){message('HEX должен быть #RRGGBB',true);return;}setColor(e.target.value);};$('pattern').onchange=pattern;$('fill').onclick=()=>{colors.fill(selected);paint();};$('zone').oninput=paint;$('paint-zone').onclick=()=>{const i=+$('zone').value-1;if(i>=0&&i<colors.length){colors[i]=selected;paint();}};
 $('ring').onclick=e=>{if(!ledCount)return;const rect=e.target.getBoundingClientRect(),x=(e.clientX-rect.left)*360/rect.width-180,y=(e.clientY-rect.top)*320/rect.height-150;let angle=(Math.atan2(y,x)+Math.PI/2+2*Math.PI)%(2*Math.PI);$('zone').value=Math.round(angle/(2*Math.PI)*ledCount)%ledCount+1;paint();};
-['#FF0000','#00FF00','#0000FF','#FFFF00','#FFFFFF','#808080','#000000'].forEach(color=>{const b=document.createElement('button');b.style.background=color;b.title=color;b.setAttribute('aria-label',color);b.onclick=()=>{$('pattern').value='solid';setColor(color);};$('swatches').append(b);});
+['#FF0000','#00FF00','#0000FF','#FFFF00','#FFFFFF','#808080','#000000'].forEach(color=>{const b=document.createElement('button');b.className='chip';b.textContent=color;b.title=color;b.setAttribute('aria-label',color);b.onclick=()=>{$('pattern').value='solid';setColor(color);};$('swatches').append(b);});
 $('preview').onclick=async()=>{running=true;await renew();clearInterval(heartbeat);if(running)heartbeat=setInterval(renew,1000);};$('stop').onclick=stop;
 document.addEventListener('input',e=>{if(!['hex','zone'].includes(e.target.id))dirty();const out=$(e.target.id+'-value');if(out)out.textContent=e.target.value;});
 $('spectrum-mode').onchange=()=>{if($('spectrum-mode').value==='eq')$('spectrum').checked=true;dirty();};$('defaults').onclick=()=>{const c=tuning(),d=defaults();for(const k of keys)if(k.startsWith('spectrum')||k==='led_level')c[k]=d[k];populate(c);$('override-black').checked=false;dirty();};$('points-reset').onclick=()=>{for(const name of Object.keys(pointDefaults))$('point-'+name).value=pointDefaults[name];dirty();if(running){clearTimeout(previewDebounce);previewDebounce=setTimeout(renew,180);}};$('flat').onclick=()=>{const c=tuning();c.equalizer=defaults().equalizer;populate(c);dirty();};
@@ -253,12 +258,13 @@ populate=function(cfg){rawPopulate(cfg);$('override-black').checked=Object.hasOw
 document.addEventListener('input',()=>{if(running){clearTimeout(previewDebounce);previewDebounce=setTimeout(renew,180);}});
 $('black-color').addEventListener('input',()=>{if($('pattern').value==='black')pattern();});
 function syncScopeControls(){const native=scope==='luna';$('scope').value=scope;['timing','eq-on','preamp','brightness','saturation','floor','black-color','override-black','spectrum',...frequencies.map((_,i)=>'eq'+i)].forEach(id=>$(id).disabled=native);$('scope-note').textContent=native?'Общий LED backend Luna: работает без AirPlay. Кольцо и логотип выбираются по возможностям устройства. Сохраняется RGB-коррекция клиентов Luna, не самого maind; она может суммироваться с коррекцией плагина.':'Цвета и эффекты применяются сразу; EQ и задержка — после перезапуска.';}
-async function loadPanel(auto=false){stopStatusPoll();$('save').disabled=true;zoneSpec='';try{let s=await status();if(false&&auto&&scope==='airplay'&&(!s||!ledCount)){scope='luna';syncScopeControls();s=await status();}if(!s)throw Error('Нет совместимого backend');original=await api('settings');populate(original);presetData=await api('presets');renderPresets();$('save').disabled=scope==='luna'&&!ledCount;$('dirty').classList.remove('on');$('dirty').textContent='Настройки загружены';message(ledCount?'Готово. Тест LED запускается отдельно.':(s.unavailable_reason||'У этой области нет поддерживаемого LED-выхода'),!ledCount);startStatusPoll();}catch(e){message('Панель недоступна: '+e.message,true);$('dirty').textContent='Включите AirPlay, AirPlay Panel и AirPlay Panel Command';$('preview').disabled=true;}}
+async function loadPanel(auto=false){stopStatusPoll();$('save').disabled=true;zoneSpec='';try{let s=await status();if(false&&auto&&scope==='airplay'&&(!s||!ledCount)){scope='luna';syncScopeControls();s=await status();}if(!s)throw Error($('owner').textContent||'Нет совместимого backend');original=await api('settings');populate(original);presetData=await api('presets');renderPresets();$('save').disabled=scope==='luna'&&!ledCount;$('dirty').classList.remove('on');$('dirty').textContent='Настройки загружены';message(ledCount?'Готово. Тест LED запускается отдельно.':(s.unavailable_reason||'У этой области нет поддерживаемого LED-выхода'),!ledCount);startStatusPoll();}catch(e){message('Панель недоступна: '+e.message,true);$('dirty').textContent='Включите AirPlay, AirPlay Panel и AirPlay Panel Command';$('preview').disabled=true;}}
 $('scope').onchange=async()=>{await stop();scope=$('scope').value;syncScopeControls();await loadPanel();};
 $('output-zone').onchange=async()=>{await stop();await status();pattern();};
 async function pluginState(){const r=await fetch('/api/plugins',{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);const list=await r.json();const item=list.find(p=>p.manifest&&p.manifest.id==='airplay.airplay-luna');return item?{version:item.manifest.version,running:!!item.running}:null;}
 async function showVersions(){try{const s=await pluginState();$('update-version').textContent=s?('Сейчас: '+s.version+(s.running?' · работает':' · остановлен')):'Плагин не найден';}catch(e){$('update-version').textContent='';}}
 $('update').onclick=async()=>{const button=$('update'),status=$('update-status');if(button.disabled)return;if(!confirm('Обновить AirPlay из реестра? Приёмник перезапустится, звук прервётся.'))return;let before=null;try{before=await pluginState();}catch{}button.disabled=true;status.textContent='Запускаю обновление…';const started=performance.now();try{const attempt=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');const response=await fetch('/api/plugins/airplay.panel-command/invoke',{method:'POST',headers:{'Content-Type':'application/json','X-Luna-Local':'1'},body:JSON.stringify({args:[JSON.stringify({update:true,attempt})]})});if(!response.ok)throw Error('Включите AirPlay Panel Command: HTTP '+response.status);while(performance.now()-started<420000){await new Promise(r=>setTimeout(r,2000));let now=null;try{now=await pluginState();}catch{continue;}if(!now)continue;if(now.running&&(!before||now.version!==before.version)){status.textContent='Готово: '+now.version;message('AirPlay обновлён до '+now.version+'.');showVersions();return;}if(now.running&&before&&now.version===before.version&&performance.now()-started>60000){status.textContent='Уже актуально: '+now.version;message('Стоит последняя версия '+now.version+'.');showVersions();return;}status.textContent='Устанавливаю… прошло '+Math.round((performance.now()-started)/1000)+' с';}status.textContent='Обновление не подтвердилось за 7 минут. Проверьте плагин в Luna.';}catch(e){status.textContent=e.message;message(e.message,true);}finally{button.disabled=false;}};
+window.addEventListener('resize',paint);
 showVersions();
 (async()=>{try{const r=await fetch('/api/device');if(r.ok){const d=await r.json();model=d.model||'';$('device').textContent=model+(d.room?' · '+d.room:'');}}catch{}await loadPanel(true);})();
 </script></body></html>

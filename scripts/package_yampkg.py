@@ -59,7 +59,7 @@ NEW_PERMISSIONS = (
     '"media.native", "input.alice"]'
 )
 OLD_PERMISSIONS = 'permissions = ["exec", "clock", "led", "ipc.speech", "commands"]'
-LUNA_DEPENDENCY = "yam/luna >=0.2.29"
+LUNA_DEPENDENCY = "yam/luna >=0.2.32"
 # The public base release still ships its own loader, libc and glibc runtime
 # libraries. The 2.1.5 runtime is built for the firmware glibc, so the package
 # no longer needs a second libc; the supervisor points children at lib/.

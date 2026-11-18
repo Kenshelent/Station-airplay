@@ -498,15 +498,19 @@ func (t *spectrumTap) rawFrame(n int, level uint8) []string {
 		// legacy four-band history below.
 		value := (spectrumFloor + math.Pow(history[band], 1.3)*.9) * scale
 		if !eqMode {
-			idx := i * len(bands) / n
-			if idx >= len(bands) {
-				idx = len(bands) - 1
+			// Every measured band must reach a physical LED. Six LEDs cannot
+			// index eight bands one-for-one: that silently discarded 8 kHz.
+			from, to := i*len(bands)/n, (i+1)*len(bands)/n
+			if to <= from {
+				to = from + 1
 			}
-			value = (spectrumFloor + math.Pow(bands[idx], 1.3)*.9) * scale
-			if peaks[idx] > bands[idx] {
-				// A short peak marker keeps fast transients visible at 20 fps.
-				value += (peaks[idx] - bands[idx]) * .35
+			var heard, peak float64
+			for idx := from; idx < to && idx < len(bands); idx++ {
+				heard = math.Max(heard, bands[idx])
+				peak = math.Max(peak, peaks[idx])
 			}
+			value = (spectrumFloor + math.Pow(heard, 1.3)*.9) * scale
+			value += math.Max(0, peak-heard) * .35 * scale
 			value = math.Min(1, value)
 		}
 		// Boost spectrum only, keeping one common RGB multiplier. Black artwork
