@@ -18,7 +18,7 @@ import (
 // controlsDefaultsVersion is bumped whenever a release changes the seeded
 // defaults in a way existing installs should pick up. Missing in the file
 // means version 1 (2.1.4 and older).
-const controlsDefaultsVersion = 4
+const controlsDefaultsVersion = 5
 
 type defaultsRule struct {
 	version  int
@@ -47,6 +47,11 @@ var controlsDefaultsRules = []defaultsRule{
 	// station had no audible effect. shairport scales the stream itself now;
 	// the station keeps its own volume for Alice and the buttons.
 	{4, "yandexmicro", "native_volume", true, false},
+	// 2.1.18: the original Mini's logo inherited the Lite 2 white balance,
+	// which turns purple artwork blue. The six-zone logo is neutral.
+	{5, "yandexmini", "spectrum_gain_r", 0.7, 1},
+	{5, "yandexmini", "spectrum_gain_g", 0.7, 1},
+	{5, "yandexmini", "spectrum_gain_b", 1.85, 1},
 }
 
 // migrateControls stamps the file with the current defaults version and

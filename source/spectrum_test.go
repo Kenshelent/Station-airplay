@@ -66,12 +66,22 @@ func TestSolidFrameUsesArtworkColour(t *testing.T) {
 	}
 }
 
+// seedBands fills the eight-band analyser state from four coarse values so a
+// frame test can describe loudness without running real PCM through it.
+func seedBands(state *airplayState, coarse [4]float64) {
+	state.history = coarse
+	for i := range state.bands {
+		state.bands[i] = coarse[i*len(coarse)/len(state.bands)]
+	}
+	state.peaks = state.bands
+}
+
 func TestSpectrumFrameFollowsBandsAndCoverHue(t *testing.T) {
 	tap := newSpectrumTap(t.TempDir())
 	tap.mu.Lock()
 	tap.state.status = "playing"
 	tap.state.lastAudio = time.Now()
-	tap.state.history = [4]float64{1, 0, 0, 0}
+	seedBands(&tap.state, [4]float64{1, 0, 0, 0})
 	tap.hue, tap.haveHue = 120, true
 	tap.mu.Unlock()
 
@@ -111,7 +121,7 @@ func TestSpectrumFrameWithoutArtworkPulsesNeutral(t *testing.T) {
 	tap.mu.Lock()
 	tap.state.status = "playing"
 	tap.state.lastAudio = time.Now()
-	tap.state.history = [4]float64{1, .6, .3, .1}
+	seedBands(&tap.state, [4]float64{1, .6, .3, .1})
 	tap.mu.Unlock()
 	frame := tap.frame(6, 200)
 	seen := map[string]bool{}

@@ -123,10 +123,8 @@ func newSpectrumTap(coverDir string) *spectrumTap {
 	}
 }
 
-// run drains the analyser FIFO. shairport-sync blocks if the audio FIFO has
-// no reader, so this goroutine must outlive every AirPlay session. Artwork is
-// read from the receiver's own cache so the display metadata FIFO keeps a
-// single reader.
+// run drains the analyser FIFO. It must outlive every AirPlay session so
+// shairport never blocks while opening or writing the file PCM.
 func (t *spectrumTap) run(ctx context.Context, audioFD int) {
 	tick := time.NewTicker(20 * time.Millisecond)
 	defer tick.Stop()
@@ -473,6 +471,7 @@ func (t *spectrumTap) rawFrame(n int, level uint8) []string {
 	blackColor := t.blackColor
 	lut := t.lut
 	eqMode, eqIntensity := t.eqMode, t.eqIntensity
+	bands, peaks := t.state.bands, t.state.peaks
 	if satBoost < 1 {
 		satBoost = 1
 	}
@@ -495,7 +494,21 @@ func (t *spectrumTap) rawFrame(n int, level uint8) []string {
 		if band > 3 {
 			band = 3
 		}
+		// The visualizer uses the eight measured bands; the equalizer keeps the
+		// legacy four-band history below.
 		value := (spectrumFloor + math.Pow(history[band], 1.3)*.9) * scale
+		if !eqMode {
+			idx := i * len(bands) / n
+			if idx >= len(bands) {
+				idx = len(bands) - 1
+			}
+			value = (spectrumFloor + math.Pow(bands[idx], 1.3)*.9) * scale
+			if peaks[idx] > bands[idx] {
+				// A short peak marker keeps fast transients visible at 20 fps.
+				value += (peaks[idx] - bands[idx]) * .35
+			}
+			value = math.Min(1, value)
+		}
 		// Boost spectrum only, keeping one common RGB multiplier. Black artwork
 		// retains its deliberately dim fallback; pause does not use this path.
 		if brightness > 0 && !darkCover {

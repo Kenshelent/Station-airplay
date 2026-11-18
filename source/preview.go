@@ -126,13 +126,14 @@ func (p *ledPreview) paint(ctx context.Context, c *sharedController, now time.Ti
 		if c.spectrum != nil {
 			colors = c.spectrum.colorize(colors)
 		}
-		err = c.station.Colors(ctx, colors)
+		err = c.writeLEDColors(ctx, colors)
 		p.drawn = err == nil
 	} else if p.drawn {
 		if releaser, ok := c.station.(ringReleaser); ok {
 			err = releaser.Release(ctx)
+			c.output.record(nil, [4]float64{}, true, err, time.Now())
 		} else if p.reason == "" && now.Before(p.safeUntil) {
-			err = c.station.Off(ctx)
+			err = c.writeLEDOff(ctx)
 		}
 		p.drawn = false
 	}

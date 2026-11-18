@@ -265,8 +265,19 @@ func uiAsound(pcm, fifo string) string {
 
 // uiAsoundSpectrum optionally adds a second file PCM in the chain so the
 // analyser gets its own copy of the same PCM without a second FIFO reader.
-func uiAsoundSpectrum(pcm, clockFIFO, spectrumFIFO string) string {
-	stream := pcm
+func uiAsoundSpectrum(pcm, clockFIFO, spectrumFIFO string, rateConverter ...string) string {
+	return uiAsoundSpectrumAtRate(pcm, clockFIFO, spectrumFIFO, 48000, rateConverter...)
+}
+
+func uiAsoundSpectrumAtRate(pcm, clockFIFO, spectrumFIFO string, rate int, rateConverter ...string) string {
+	// Both file taps copy the forced S16_LE stereo stream. Conversion to the
+	// hardware's native format happens below them, never before the analyser.
+	outputBlock := fmt.Sprintf(`pcm.spk_output {
+ type plug
+ slave.pcm %q
+}
+`, pcm)
+	stream := "spk_output"
 	var spectrumBlock string
 	if spectrumFIFO != "" {
 		spectrumBlock = fmt.Sprintf(`pcm.spk_spectrum_file {
@@ -291,11 +302,23 @@ func uiAsoundSpectrum(pcm, clockFIFO, spectrumFIFO string) string {
 `, stream, clockFIFO)
 		stream = "spk_file"
 	}
-	return spectrumBlock + clockBlock + fmt.Sprintf(`pcm.spk_tee {
+	// Name the converter explicitly where the firmware's ALSA plugin
+	// directory is missing. Yandex resamples to 48 kHz before ALSA, so its own
+	// plug never needs this module; the receiver gets 44.1 kHz from AirPlay.
+	converter := ""
+	if len(rateConverter) > 0 && rateConverter[0] != "" {
+		converter = fmt.Sprintf("defaults.pcm.rate_converter %q\n", rateConverter[0])
+	}
+	return converter + outputBlock + spectrumBlock + clockBlock + fmt.Sprintf(`pcm.spk_tee {
  type plug
- slave.pcm %q
+ slave {
+  pcm %q
+  rate %d
+  format "S16_LE"
+  channels 2
+ }
 }
-`, stream)
+`, stream, rate)
 }
 
 func receiverControlConfig(p stationProfile, controls *controlsConfig, artwork ...bool) string {
@@ -338,7 +361,7 @@ func receiverControlConfig(p stationProfile, controls *controlsConfig, artwork .
 func audioEnv(environ []string, home, bus string) []string {
 	env := []string{}
 	for _, s := range environ {
-		if strings.HasPrefix(s, "YAM_API_") || strings.HasPrefix(s, "LUNA_API_") || strings.HasPrefix(s, "LD_LIBRARY_PATH=") || (bus != "" && strings.HasPrefix(s, "DBUS_SYSTEM_BUS_ADDRESS=")) || strings.HasPrefix(s, "HOME=") {
+		if strings.HasPrefix(s, "YAM_API_") || strings.HasPrefix(s, "LUNA_API_") || strings.HasPrefix(s, "LD_LIBRARY_PATH=") || (bus != "" && strings.HasPrefix(s, "DBUS_SYSTEM_BUS_ADDRESS=")) || strings.HasPrefix(s, "HOME=") || strings.HasPrefix(s, "ALSA_CONFIG_PATH=") {
 			continue
 		}
 		env = append(env, s)
@@ -407,6 +430,43 @@ func stockHost(p stationProfile) (string, error) {
 	return stockHostname(p.mdnsHostPrefix, string(b))
 }
 
+// prepareALSAConfig writes the receiver's private ALSA configuration. The
+// firmware's alsa.conf includes ~/.asoundrc through an optional hook; the
+// Mini's vendor alsa-lib may not, and shairport silences ALSA diagnostics, so
+// a silently ignored file looks like ENOENT. Pointing ALSA_CONFIG_PATH at a
+// file that includes the system configuration and the analyser chain removes
+// that ambiguity. Returns "" when the firmware has no readable system config.
+func prepareALSAConfig(state, asoundrc string) (string, error) {
+	body, err := os.ReadFile(asoundrc)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+		return "", err
+	}
+	system := ""
+	for _, name := range []string{"/usr/share/alsa/alsa.conf", "/etc/alsa/alsa.conf"} {
+		if info, e := os.Stat(name); e == nil && info.Mode().IsRegular() {
+			system = name
+			break
+		}
+	}
+	if system == "" {
+		return "", nil
+	}
+	config := filepath.Join(state, "alsa.conf")
+	var b strings.Builder
+	fmt.Fprintf(&b, "</%s>\n", strings.TrimPrefix(system, "/"))
+	if info, e := os.Stat("/etc/asound.conf"); e == nil && info.Mode().IsRegular() {
+		b.WriteString("</etc/asound.conf>\n")
+	}
+	b.Write(body)
+	if err = os.WriteFile(config, []byte(b.String()), 0600); err != nil {
+		return "", err
+	}
+	return config, nil
+}
+
 // dbusCommand returns the D-Bus tool: firmware /usr/bin or the packaged ARMhf
 // build. Packaged children receive LD_LIBRARY_PATH from runtimeEnv.
 func dbusCommand(root string, p stationProfile, tool string) (string, []string) {
@@ -431,13 +491,16 @@ func legacyRuntimeLoader(root string) string {
 // withLegacyRuntime runs a packaged binary through the bundled loader so the
 // package libc, not the firmware one, resolves its symbols. Firmware tools and
 // packages without the loader are returned unchanged.
-func withLegacyRuntime(root, bin string, args []string) (string, []string) {
+// Additional firmware directories follow the package directory, preserving the
+// private libc while allowing firmware ALSA plugins to resolve their helpers.
+func withLegacyRuntime(root, bin string, args []string, extraLibs ...string) (string, []string) {
 	loader := legacyRuntimeLoader(root)
 	prefix := filepath.Join(root, "bin") + string(filepath.Separator)
 	if loader == "" || !strings.HasPrefix(bin, prefix) {
 		return bin, args
 	}
-	return loader, append([]string{"--library-path", filepath.Join(root, "lib"), bin}, args...)
+	libs := append([]string{filepath.Join(root, "lib")}, extraLibs...)
+	return loader, append([]string{"--library-path", strings.Join(libs, string(os.PathListSeparator)), bin}, args...)
 }
 
 func firmwareALSA(p stationProfile) string {
@@ -560,7 +623,7 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 		if spectrum {
 			spectrumTapFIFO = spectrumFIFO
 		}
-		if err = os.WriteFile(filepath.Join(state, ".asoundrc"), []byte(uiAsoundSpectrum(p.pcm, clockFIFO, spectrumTapFIFO)), 0600); err != nil {
+		if err = os.WriteFile(filepath.Join(state, ".asoundrc"), []byte(uiAsoundSpectrumAtRate(p.pcm, clockFIFO, spectrumTapFIFO, profileOutputRate(p), p.alsaRateConverter)), 0600); err != nil {
 			return err
 		}
 		if audioFD, err = ensureFIFO(audioFIFO); err != nil {
@@ -573,6 +636,7 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 		defer syscall.Close(metaFD)
 		if spectrum {
 			tap = newSpectrumTap(coverArtDir)
+			tap.state.sampleRate = profileOutputRate(p)
 			if err = configureSpectrum(d, *controls, tap); err != nil {
 				return err
 			}
@@ -586,7 +650,7 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 			return err
 		}
 		if spectrum {
-			if err = os.WriteFile(filepath.Join(state, ".asoundrc"), []byte(uiAsoundSpectrum(p.pcm, "", spectrumFIFO)), 0600); err != nil {
+			if err = os.WriteFile(filepath.Join(state, ".asoundrc"), []byte(uiAsoundSpectrumAtRate(p.pcm, "", spectrumFIFO, profileOutputRate(p), p.alsaRateConverter)), 0600); err != nil {
 				return err
 			}
 			if spectrumFD, err = ensureFIFO(spectrumFIFO); err != nil {
@@ -603,6 +667,7 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 		defer syscall.Close(metaFD)
 		go drainFIFO(ctx, metaFD)
 		tap = newSpectrumTap(coverArtDir)
+		tap.state.sampleRate = profileOutputRate(p)
 		if !spectrum {
 			// A solid frame still needs the per-model gains and neutral-black
 			// rule; the spectrum path configures the tap when it starts.
@@ -632,6 +697,13 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 			return fmt.Errorf("AirPlay 2 timing port UDP %d occupied: %w", port, e)
 		}
 		socket.Close()
+	}
+	alsaConfig, err := prepareALSAConfig(state, filepath.Join(state, ".asoundrc"))
+	if err != nil {
+		return err
+	}
+	if alsaConfig != "" {
+		fmt.Fprintln(os.Stderr, "station-airplay: private ALSA config", alsaConfig)
 	}
 	conf := filepath.Join(state, "shairport.conf")
 	config := receiverControlConfig(p, controls, tap != nil)
@@ -697,6 +769,7 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 	}
 	launchAP2 := func(name string, args ...string) error {
 		binary, childEnv := name, libEnv
+		var firmwareLibs []string
 		if name == "shairport-sync" {
 			binary = "shairport-sync-ap2"
 			if p.receiverABI == "aarch64" {
@@ -704,10 +777,17 @@ func serveSharedControls(ctx context.Context, p stationProfile, api *yamAPI, d y
 				childEnv = runtimeEnv(env, filepath.Join(libs, "aarch64")+":/usr/lib:/lib", "")
 			} else {
 				// Shared dmix must use the firmware ALSA ABI, not the legacy Light library.
-				childEnv = runtimeEnv(env, libs, firmwareALSA(p))
+				if p.alsaLib != "" {
+					firmwareLibs = append(firmwareLibs, filepath.Dir(p.alsaLib))
+				}
+				libraryPath := strings.Join(append([]string{libs}, firmwareLibs...), string(os.PathListSeparator))
+				childEnv = runtimeEnv(env, libraryPath, firmwareALSA(p))
+				if alsaConfig != "" {
+					childEnv = append(childEnv, "ALSA_CONFIG_PATH="+alsaConfig)
+				}
 			}
 		}
-		path, args := withLegacyRuntime(root, filepath.Join(root, "bin", binary), args)
+		path, args := withLegacyRuntime(root, filepath.Join(root, "bin", binary), args, firmwareLibs...)
 		return launchWith(name, path, childEnv, args...)
 	}
 	if err = launchAP2("nqptp", "-v"); err != nil {

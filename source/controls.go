@@ -289,6 +289,7 @@ type sharedController struct {
 	ledRefreshAt, ledQuietUntil time.Time
 	spectrum                    *spectrumTap
 	ledMu                       sync.Mutex
+	output                      ledOutput
 	ledPlay, ledFailed          atomic.Bool
 	ledSolid                    atomic.Bool
 	observedNative              int
@@ -678,7 +679,7 @@ func (c *sharedController) tick(ctx context.Context, now time.Time) error {
 		if c.ledOwned {
 			c.ledOwned = false
 			c.ledState = ""
-			return c.station.Off(ctx)
+			return c.writeLEDOff(ctx)
 		}
 		return nil
 	}
@@ -810,7 +811,7 @@ func (c *sharedController) tick(ctx context.Context, now time.Time) error {
 				}
 			}
 			c.ledMu.Lock()
-			err = c.station.Colors(ctx, colors)
+			err = c.writeLEDColors(ctx, colors)
 			c.ledMu.Unlock()
 			if err != nil {
 				aliceButtonDebug("led: colors failed: %v", err)
@@ -972,7 +973,7 @@ func (c *sharedController) close(ctx context.Context) {
 		_ = c.receiver.Gain(ctx, 100, 0)
 	}
 	if c.ledOwned {
-		_ = c.station.Off(ctx)
+		_ = c.writeLEDOff(ctx)
 		c.ledOwned = false
 		c.ledState = ""
 	}
@@ -984,7 +985,9 @@ func (c *sharedController) close(ctx context.Context) {
 // no-op for sysfs stations, whose Off already means "stop painting".
 func (c *sharedController) releaseRing(ctx context.Context) {
 	if r, ok := c.station.(ringReleaser); ok {
-		if err := r.Release(ctx); err != nil {
+		err := r.Release(ctx)
+		c.output.record(nil, [4]float64{}, true, err, time.Now())
+		if err != nil {
 			aliceButtonDebug("led: ring release failed: %v", err)
 		}
 	}

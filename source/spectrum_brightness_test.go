@@ -139,7 +139,7 @@ func TestSpectrumStation2BlackGlowAndCeiling(t *testing.T) {
 
 	tap.coverColor = [3]float64{1, 1, 1}
 	tap.ceiling = 1
-	tap.state.history = [4]float64{1, 1, 1, 1}
+	seedBands(&tap.state, [4]float64{1, 1, 1, 1})
 	r, g, b = parseHex(t, tap.frame(1, 200)[0])
 	if r < 230 || g < 230 || b < 230 {
 		t.Fatalf("white cover is too dim: %d/%d/%d", r, g, b)

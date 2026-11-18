@@ -29,6 +29,17 @@ def slim_bytes(name, data, executable="upx"):
     """Return (packed_bytes, record). Raises if the input is not a packed ELF."""
     if data[:4] != b"\x7fELF":
         raise SystemExit("%s is not an ELF binary" % name)
+    # A base release already carries packed runtime binaries. Repacking them is
+    # not idempotent: UPX refuses an input it packed itself, so keep the
+    # verified bytes instead of failing the whole release build.
+    if b"UPX!" in data[:4096]:
+        return data, {
+            "file": name,
+            "before": len(data),
+            "after": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "already_packed": True,
+        }
     with tempfile.TemporaryDirectory(prefix="upx-") as directory:
         target = Path(directory) / name
         target.write_bytes(data)

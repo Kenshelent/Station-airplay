@@ -41,12 +41,75 @@ const (
 // quasarConfigPath is a variable so tests can point the probe at a fixture.
 var quasarConfigPath = "/system/vendor/quasar/quasar.cfg"
 
-type alsaControlVolume struct {
-	path string
-	luna volumeControl // optional: used when ALSA is not ready on this board
+// asoundConfigPath names the firmware ALSA config that defines the softvol
+// control. It is a variable so tests can use a fixture.
+var asoundConfigPath = "/etc/asound.conf"
+
+// mixerControl returns the control used by the firmware's softvol PCM.
+// Falling back to "Master" keeps every model that uses the conventional name.
+func mixerControl() string {
+	data, err := os.ReadFile(asoundConfigPath)
+	if err != nil {
+		return "Master"
+	}
+	control := ""
+	softvol := false
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "pcm.") && !strings.HasPrefix(trimmed, "pcm.softvol") {
+			softvol = false
+		}
+		if strings.HasPrefix(trimmed, "pcm.softvol") {
+			softvol = true
+			continue
+		}
+		if !softvol {
+			continue
+		}
+		if value, ok := controlName(trimmed); ok {
+			control = value
+			break
+		}
+	}
+	if control == "" {
+		return "Master"
+	}
+	return control
 }
 
-func (v *alsaControlVolume) Backend() string { return "ALSA Master (Luna volume manager unavailable)" }
+// controlName accepts both "control.name \"X\"" and "name \"X\"" lines.
+func controlName(line string) (string, bool) {
+	line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "control."))
+	if !strings.HasPrefix(line, "name") {
+		return "", false
+	}
+	line = strings.TrimSpace(strings.TrimPrefix(line, "name"))
+	if len(line) < 2 || line[0] != '"' {
+		return "", false
+	}
+	if end := strings.IndexByte(line[1:], '"'); end > 0 {
+		return line[1 : 1+end], true
+	}
+	return "", false
+}
+
+type alsaControlVolume struct {
+	path        string
+	controlName string
+	luna        volumeControl // optional: used when ALSA is not ready on this board
+}
+
+func (v *alsaControlVolume) Backend() string {
+	return "ALSA " + v.control() + " (Luna volume manager unavailable)"
+}
+
+func (v *alsaControlVolume) control() string {
+	if v.controlName != "" {
+		return v.controlName
+	}
+	v.controlName = mixerControl()
+	return v.controlName
+}
 
 // amixerEnv is deliberately clean. The plugin inherits the package's loader
 // environment, and the system amixer must not load that libc.
@@ -99,7 +162,7 @@ func lastPercent(out string) (int, error) {
 }
 
 func (v *alsaControlVolume) read(ctx context.Context) (int, error) {
-	out, err := v.run(ctx, "get", "Master")
+	out, err := v.run(ctx, "get", v.control())
 	if err != nil {
 		return 0, err
 	}
@@ -121,10 +184,10 @@ func (v *alsaControlVolume) SetVolume(ctx context.Context, pct int) (float64, er
 	if pct < 0 || pct > 100 {
 		return 0, errors.New("volume must be 0..100")
 	}
-	if _, err := v.run(ctx, "set", "Master", fmt.Sprintf("%d%%", pct)); err == nil {
+	if _, err := v.run(ctx, "set", v.control(), fmt.Sprintf("%d%%", pct)); err == nil {
 		// Not every control carries a playback switch (softvol without one is
 		// common), so the switch is best-effort, exactly as Luna does it.
-		_, _ = v.run(ctx, "set", "Master", "unmute")
+		_, _ = v.run(ctx, "set", v.control(), "unmute")
 		if actual, err := v.read(ctx); err == nil && actual-pct >= -5 && actual-pct <= 5 {
 			return float64(actual), nil
 		}

@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"time"
 )
@@ -20,10 +21,66 @@ func spectrumLEDLevel(cfg controlsConfig) uint8 {
 	return level
 }
 
+// animationInterval is the LED frame period. 50 ms (20 fps) makes colour
+// transitions and fast transients look continuous, while staying well inside
+// what the station's LED API accepts.
+const animationInterval = 50 * time.Millisecond
+
+// blendFrames eases from the shown frame towards the next one, so a cover
+// change or a band jump does not flash.
+func blendFrames(shown, next []string, factor float64) []string {
+	if len(shown) != len(next) {
+		return append([]string(nil), next...)
+	}
+	out := make([]string, len(next))
+	for i := range next {
+		ar, ag, ab, ok := parseLedColor(shown[i])
+		br, bg, bb, ok2 := parseLedColor(next[i])
+		if !ok || !ok2 {
+			out[i] = next[i]
+			continue
+		}
+		blend := func(a, b int) int {
+			return int(math.Round(float64(a) + float64(b-a)*factor))
+		}
+		out[i] = fmt.Sprintf("#%02X%02X%02X", blend(ar, br), blend(ag, bg), blend(ab, bb))
+	}
+	return out
+}
+
+func parseLedColor(value string) (int, int, int, bool) {
+	if len(value) != 7 || value[0] != '#' {
+		return 0, 0, 0, false
+	}
+	var rgb [3]int
+	for i := 0; i < 3; i++ {
+		hi := hexValue(value[1+i*2])
+		lo := hexValue(value[2+i*2])
+		if hi < 0 || lo < 0 {
+			return 0, 0, 0, false
+		}
+		rgb[i] = hi*16 + lo
+	}
+	return rgb[0], rgb[1], rgb[2], true
+}
+
+func hexValue(c byte) int {
+	switch {
+	case c >= '0' && c <= '9':
+		return int(c - '0')
+	case c >= 'A' && c <= 'F':
+		return int(c-'A') + 10
+	case c >= 'a' && c <= 'f':
+		return int(c-'a') + 10
+	}
+	return -1
+}
+
 func runSpectrumLEDs(ctx context.Context, c *sharedController, tap *spectrumTap, _ uint8) {
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(animationInterval)
 	defer ticker.Stop()
 	var lastErr time.Time
+	var shown []string
 	for {
 		select {
 		case <-ctx.Done():
@@ -56,7 +113,12 @@ func runSpectrumLEDs(ctx context.Context, c *sharedController, tap *spectrumTap,
 				c.ledMu.Unlock()
 				continue
 			}
-			err := c.station.Colors(ctx, colors)
+			if len(shown) != len(colors) {
+				shown = append([]string(nil), colors...)
+			} else {
+				shown = blendFrames(shown, colors, .45)
+			}
+			err := c.writeLEDColors(ctx, shown)
 			c.ledMu.Unlock()
 			if err != nil {
 				if errors.Is(err, errFramebufferBusy) {

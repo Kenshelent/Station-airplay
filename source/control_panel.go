@@ -100,7 +100,8 @@ func startControlPanel(ctx context.Context, c *sharedController, path, socket st
 			w.WriteHeader(405)
 			return
 		}
-		respond(w, 200, map[string]any{"preview": c.preview.status(time.Now()), "led_count": c.ledCount,
+		live := c.output.snapshot(time.Now())
+		respond(w, 200, map[string]any{"live": live, "preview": c.preview.status(time.Now()), "led_count": c.ledCount,
 			"model": c.device.Model, "defaults": panelDefaults(c.device),
 			"zones":           []map[string]any{{"id": "artwork", "count": c.ledCount, "supported": c.cfg.LEDs && c.ledCount > 0}},
 			"equalizer_scope": "AirPlay only", "settings_apply": "live", "timing_modes": []string{timingSynchronized, timingFastAudio}})

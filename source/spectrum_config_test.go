@@ -7,6 +7,33 @@ import (
 	"testing"
 )
 
+func TestMiniAnalyserPinsBuiltInConverter(t *testing.T) {
+	var mini stationProfile
+	found := false
+	for _, p := range profiles {
+		if len(p.models) > 0 && p.models[0] == "yandexmini" {
+			mini, found = p, true
+		}
+	}
+	if !found {
+		t.Fatal("original Mini profile missing")
+	}
+	if mini.alsaRateConverter != "linear" {
+		t.Fatal("original Mini must not depend on the missing firmware SRC module")
+	}
+	conf := uiAsoundSpectrum(mini.pcm, "", spectrumFIFO, mini.alsaRateConverter)
+	if !strings.Contains(conf, `defaults.pcm.rate_converter "linear"`) {
+		t.Fatalf("Mini analyser config lacks the pinned converter:\n%s", conf)
+	}
+	if strings.Index(conf, "rate_converter") > strings.Index(conf, "pcm.spk_tee") {
+		t.Fatal("converter default must precede the PCM definitions")
+	}
+	other := uiAsoundSpectrum("speakers", "", spectrumFIFO)
+	if strings.Contains(other, "rate_converter") {
+		t.Fatal("a profile with working firmware ALSA changed")
+	}
+}
+
 func TestSpectrumConfigBounds(t *testing.T) {
 	dir := t.TempDir()
 	write := func(body string) (*controlsConfig, error) {
@@ -113,7 +140,7 @@ func TestSpectrumALSAChainKeepsClockAndAnalyserSeparate(t *testing.T) {
 	for _, want := range []string{
 		`pcm.spk_file`, `file "` + audioFIFO + `"`,
 		`pcm.spk_spectrum_file`, `file "` + spectrumFIFO + `"`,
-		`slave.pcm "spk_file"`, `slave.pcm "spk_spectrum_file"`,
+		`pcm "spk_file"`, `slave.pcm "spk_spectrum_file"`, `slave.pcm "spk_output"`,
 	} {
 		if !strings.Contains(asound, want) {
 			t.Fatalf("ALSA chain lacks %q:\n%s", want, asound)

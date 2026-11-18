@@ -3,6 +3,8 @@ import re
 
 here = Path(__file__).resolve().parent
 page = (here / 'calibration-base.html').read_text()
+assert page.count('/* LIVE_VIEW_MODULE */') == 1
+page = page.replace('/* LIVE_VIEW_MODULE */', (here / 'live-view.js').read_text())
 transport = (here / 'transport.js').read_text()
 page, count = re.subn(r"async function api\(path,method='GET',body\)\{[^\n]+\}", lambda _:transport, page, count=1)
 assert count == 1

@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	version             = "Station airplay 2.1.17"
+	version             = "Station airplay 2.1.18"
 	audioFIFO           = "/tmp/sps.fifo"
 	spectrumFIFO        = "/tmp/sps-spectrum.fifo"
 	metadataFIFO        = "/tmp/shairport-sync-ap2-metadata"
@@ -210,6 +210,11 @@ type stationProfile struct {
 	// alsaLib: firmware ALSA preloaded into the ARMhf receiver so it joins
 	// Quasar's dmix with the same alsa-lib. Empty means /usr/lib/libasound.so.2.
 	alsaLib string
+	// alsaRateConverter pins the converter for firmware ALSA builds whose
+	// plugin directory does not exist on the device. empty keeps the firmware
+	// default. The original Mini ships no /lib/linkplay_a98/alsa-lib, so its
+	// external samplerate module can never be loaded.
+	alsaRateConverter string
 	// nvramHostID: Linkplay firmware publishes <prefix>-<mv_uuid> from
 	// linkplayNvram, not the boot serial.
 	nvramHostID bool
@@ -256,7 +261,7 @@ var (
 		// /media advertises speech, commands, native player and six RGB logo
 		// LEDs, so the control bridge is qualified; the Alice-button transport is
 		// not advertised and stays off.
-		{name: "Yandex Station Mini AirPlay", models: []string{"yandexmini", "YandexStationMini"}, pcm: "softvol", quasarCoexist: true, mdnsHostPrefix: "yandexmini", receiverABI: "armhf", airplayModel: "AudioAccessory5,1", alsaLib: "/system/vendor/quasar/libs/libasound.so.2", nvramHostID: true, packagedDBus: true, sharedControls: true},
+		{name: "Yandex Station Mini AirPlay", models: []string{"yandexmini", "YandexStationMini"}, pcm: "softvol", quasarCoexist: true, mdnsHostPrefix: "yandexmini", receiverABI: "armhf", airplayModel: "AudioAccessory5,1", alsaLib: "/system/vendor/quasar/libs/libasound.so.2", alsaRateConverter: "linear", nvramHostID: true, packagedDBus: true, sharedControls: true},
 	}
 	// hw is the detected profile; verifyYAM sets it before anything renders.
 	hw = plumProfile
@@ -445,10 +450,15 @@ type airplayState struct {
 	lastAudio         time.Time
 	level             float64
 	history           [4]float64
+	bands             [8]float64
+	peaks             [8]float64
 	samples           int
 	offset            int
-	pcmWindow         [256]float64
+	pcmWindow         [1024]float64
 	pcmCount          int
+	pcmPartial        [4]byte
+	pcmPartialN       int
+	pcmPhase          int
 	wave              [32]float64
 	wavePos           int
 	waveAverageDB     float64
@@ -534,6 +544,68 @@ func (s *airplayState) onMetadata(typ, code string, raw []byte, now time.Time) {
 	}
 }
 
+// spectrumBandHz is one octave apart, so each LED zone covers a comparable
+// share of what a listener hears instead of the whole treble in one zone.
+var spectrumBandHz = [8]float64{60, 120, 250, 500, 1000, 2000, 4000, 8000}
+
+// analyzeSpectrumBands measures eight logarithmic bands for the LED
+// visualizer and keeps a slowly decaying peak per band. It runs on the same
+// window as the legacy four-band analysis.
+func (s *airplayState) analyzeSpectrumBands() {
+	for band, hz := range spectrumBandHz {
+		// Probe the band edges as well as its centre: a single bin left a tone
+		// between two octaves up to 9 dB quieter than the same tone on-centre.
+		magnitude := 0.0
+		for step := -6; step < 6; step++ {
+			probe := hz * math.Pow(2, float64(step)/12)
+			if probe >= 5500 {
+				continue // above Nyquist for the 12 kHz analysis rate
+			}
+			omega := 2 * math.Pi * probe / 12000
+			coeff := 2 * math.Cos(omega)
+			var q0, q1, q2 float64
+			for _, sample := range s.pcmWindow {
+				q0 = sample + coeff*q1 - q2
+				q2, q1 = q1, q0
+			}
+			power := q1*q1 + q2*q2 - coeff*q1*q2
+			if power < 0 {
+				power = 0
+			}
+			if value := math.Sqrt(power) / 512.0; value > magnitude {
+				magnitude = value
+			}
+		}
+		level := (20*math.Log10(math.Max(magnitude, 1e-6)) + 48) / 42
+		if level < .01 {
+			level = 0
+		}
+		if level < 0 {
+			level = 0
+		}
+		if level > 1 {
+			level = 1
+		}
+		// Bass needs a faster attack than treble: with 45 windows per second a
+		// symmetric filter either smears kicks or flickers on cymbals.
+		attack, release := .65, .16
+		if band >= 4 {
+			attack, release = .5, .24
+		}
+		if level > s.bands[band] {
+			s.bands[band] = (1-attack)*s.bands[band] + attack*level
+			s.peaks[band] = math.Max(s.peaks[band], s.bands[band])
+		} else {
+			s.bands[band] = (1-release)*s.bands[band] + release*level
+		}
+		// Peak hold falls back slowly so a hit stays readable for a moment.
+		s.peaks[band] *= .985
+		if s.peaks[band] < s.bands[band] {
+			s.peaks[band] = s.bands[band]
+		}
+	}
+}
+
 // Four independent audio-frequency bands measured from the actual PCM stream.
 // Decimate stereo to 12 kHz mono, then analyze 256-sample windows.
 func (s *airplayState) analyzeWindow() {
@@ -550,9 +622,13 @@ func (s *airplayState) analyzeWindow() {
 		if power < 0 {
 			power = 0
 		}
-		magnitude := math.Sqrt(power) / 128.0
+		magnitude := math.Sqrt(power) / 512.0
 		// Logarithmic response keeps quiet passages visible without constant full bars.
 		level := (20*math.Log10(math.Max(magnitude, 1e-6)) + 48) / 42
+		if level < .02 {
+			// Silence and codec noise must not paint bars.
+			level = 0
+		}
 		if level < 0 {
 			level = 0
 		}
@@ -565,6 +641,8 @@ func (s *airplayState) analyzeWindow() {
 			s.history[band] = .78*s.history[band] + .22*level
 		}
 	}
+	s.analyzeSpectrumBands()
+	s.analyzeSpectrumBands()
 	s.level = (s.history[0] + s.history[1] + s.history[2] + s.history[3]) * .25
 	// Keep the original Plum waveform independent of the four-band LED spectrum.
 	// The historical wave moves from the two center digits toward the edges.
@@ -596,27 +674,44 @@ func (s *airplayState) analyzeWindow() {
 	s.wavePos++
 }
 func (s *airplayState) audio(pcm []byte, now time.Time) {
-	// The direct output is S16_LE stereo. Keep the analysis rate at 12 kHz.
+	// The file PCM is explicitly constrained to S16_LE stereo. FIFO reads may
+	// split a stereo frame or the decimation stride, so preserve both across
+	// calls rather than treating each read as a new audio stream.
 	rate := s.sampleRate
 	if rate == 0 {
 		rate = 48000
 	}
-	stride := (rate / 12000) * 4
-	for i := 0; i+stride-1 < len(pcm); i += stride {
-		l := float64(int16(binary.LittleEndian.Uint16(pcm[i:])))
-		r := float64(int16(binary.LittleEndian.Uint16(pcm[i+2:])))
+	downsample := rate / 12000
+	if downsample < 1 {
+		downsample = 1
+	}
+	for _, value := range pcm {
+		s.pcmPartial[s.pcmPartialN] = value
+		s.pcmPartialN++
+		if s.pcmPartialN < len(s.pcmPartial) {
+			continue
+		}
+		s.pcmPartialN = 0
+		s.pcmFrames++
+		s.lastAudio = now
+		take := s.pcmPhase == 0
+		s.pcmPhase = (s.pcmPhase + 1) % downsample
+		if !take {
+			continue
+		}
+		l := float64(int16(binary.LittleEndian.Uint16(s.pcmPartial[:2])))
+		r := float64(int16(binary.LittleEndian.Uint16(s.pcmPartial[2:])))
 		s.pcmWindow[s.pcmCount] = (l + r) / 65536
 		s.pcmCount++
 		if s.pcmCount == len(s.pcmWindow) {
 			s.analyzeWindow()
-			s.pcmCount = 0
+			const hop = 256
+			copy(s.pcmWindow[:], s.pcmWindow[hop:])
+			s.pcmCount = len(s.pcmWindow) - hop
 		}
 	}
-	if len(pcm) >= stride {
-		s.lastAudio = now
-		s.pcmFrames += uint64(len(pcm) / 4)
-	}
 }
+
 func (s *airplayState) playing(now time.Time) bool {
 	return s.status == "playing" || (s.status != "paused" && now.Sub(s.lastAudio) < 1800*time.Millisecond)
 }

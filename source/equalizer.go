@@ -80,6 +80,21 @@ func (b *biquad) sample(x float64, channel int) float64 {
 	b.z2[channel] = b.b2*x - b.a2*y
 	return y
 }
+
+// softLimit bends only the samples above the knee, so ordinary audio keeps
+// its level and boosted bands cannot clip. The ceiling stays one step below
+// the S16 maximum so rounding never produces a hard-clipped sample.
+func softLimit(x float64) float64 {
+	const knee, peak = 30000.0, 32766.0
+	if x > knee {
+		return knee + (peak-knee)*math.Tanh((x-knee)/(peak-knee))
+	}
+	if x < -knee {
+		return -knee - (peak-knee)*math.Tanh((-x-knee)/(peak-knee))
+	}
+	return x
+}
+
 func processEqualizer(r io.Reader, w io.Writer, cfg equalizerConfig, rate int) error {
 	if err := cfg.validate(); err != nil {
 		return err
@@ -99,6 +114,13 @@ func processEqualizer(r io.Reader, w io.Writer, cfg equalizerConfig, rate int) e
 			headroom -= g
 		}
 	}
+	// Summing every positive band as headroom made a +12 dB bass setting about
+	// 20 dB quieter than AirPlay without EQ. Keep a fixed reserve and limit the
+	// few peaks that the boosted bands create.
+	const maxReserveDB = -6
+	if headroom < maxReserveDB {
+		headroom = maxReserveDB
+	}
 	gain := math.Pow(10, headroom/20)
 	buf := make([]byte, 4096)
 	for {
@@ -111,7 +133,7 @@ func processEqualizer(r io.Reader, w io.Writer, cfg equalizerConfig, rate int) e
 			for j := range filters {
 				x = filters[j].sample(x, (i/2)%2)
 			}
-			x = math.Max(-32768, math.Min(32767, math.Round(x)))
+			x = math.Round(softLimit(x))
 			binary.LittleEndian.PutUint16(buf[i:i+2], uint16(int16(x)))
 		}
 		if n > 0 {
